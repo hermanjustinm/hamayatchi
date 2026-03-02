@@ -4,6 +4,7 @@ import { CREATURES } from '../gameData';
 import { getMood, getMoodEmoji, calcExpToNext } from '../gameLogic';
 import { HpBar, StatBar, ExpBar } from '../components/StatBar';
 import { BottomNav } from '../components/BottomNav';
+import { CreatureSprite } from '../components/CreatureSprite';
 import type { OwnedCreature } from '../types';
 
 export function CollectionScreen() {
@@ -51,7 +52,7 @@ export function CollectionScreen() {
         <div className="creature-detail">
           {/* Header */}
           <div className="detail-header">
-            <span className="detail-emoji">{template.emoji}</span>
+            <CreatureSprite creatureId={selectedCreature.templateId} size={100} className="creature-sprite" />
             {editNickname ? (
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <input
@@ -214,7 +215,7 @@ export function CollectionScreen() {
                   onClick={() => handleSelect(c)}
                 >
                   {c.isFavorite && <span className="fav-star">⭐</span>}
-                  <div className="coll-emoji">{tmpl.emoji}</div>
+                  <CreatureSprite creatureId={c.templateId} size={52} />
                   <div className="coll-name">{c.nickname}</div>
                   <div className="coll-level">Lv. {c.level}</div>
                   <div className={`type-badge type-${tmpl.type}`} style={{ fontSize: 6 }}>

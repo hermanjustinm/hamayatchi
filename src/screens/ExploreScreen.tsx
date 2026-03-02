@@ -2,6 +2,7 @@ import { useGame } from '../GameContext';
 import { AREAS, CREATURES } from '../gameData';
 import { getPlayerLevel } from '../gameLogic';
 import { BottomNav } from '../components/BottomNav';
+import { CreatureSprite } from '../components/CreatureSprite';
 
 export function ExploreScreen() {
   const { state, activeCreature, dispatch } = useGame();
@@ -92,11 +93,9 @@ export function ExploreScreen() {
                   <div className="area-level">
                     Recommended: {recommendedStr}
                   </div>
-                  <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                  <div style={{ display: 'flex', gap: 4, marginTop: 4, alignItems: 'center' }}>
                     {previewCreatures.map((c) => (
-                      <span key={c.id} title={c.name} style={{ fontSize: 16 }}>
-                        {c.emoji}
-                      </span>
+                      <CreatureSprite key={c.id} creatureId={c.id} size={28} style={{ display: 'inline-block' }} />
                     ))}
                     <span style={{ fontSize: 6, color: 'var(--text-muted)', alignSelf: 'center' }}>
                       + more

@@ -110,6 +110,7 @@ type GameAction =
   | { type: 'TICK' }
   | { type: 'ADD_NOTIF'; text: string; notifType: GameNotification['type'] }
   | { type: 'DISMISS_NOTIF'; id: string }
+  | { type: 'HEAL_AT_CLINIC'; creatureUid: string }
   | { type: 'RESET_GAME' };
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -182,7 +183,42 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case 'CHANGE_SCREEN': {
-      return { ...state, currentScreen: action.screen };
+      // Always clear battle state when navigating away from the battle screen
+      return {
+        ...state,
+        currentScreen: action.screen,
+        battle: action.screen !== 'battle' ? null : state.battle,
+      };
+    }
+
+    case 'HEAL_AT_CLINIC': {
+      const creature = state.creatures.find((c) => c.uid === action.creatureUid);
+      if (!creature) return state;
+
+      if (creature.currentHp === creature.maxHp && creature.statusEffect === null) {
+        return addNotif(state, `${creature.nickname} is already at full health!`, 'info');
+      }
+
+      const hpMissing = creature.maxHp - creature.currentHp;
+      const statusPenalty = creature.statusEffect ? 30 : 0;
+      const cost = Math.max(20, Math.ceil(hpMissing * 0.5) + statusPenalty);
+
+      if (state.gold < cost) {
+        return addNotif(state, `Clinic costs ${cost}g — not enough gold!`, 'error');
+      }
+
+      const updatedCreatures = updateCreature(state.creatures, action.creatureUid, (c) => ({
+        ...c,
+        currentHp: c.maxHp,
+        statusEffect: null,
+        care: { ...c.care, health: 100 },
+      }));
+
+      return addNotif(
+        { ...state, creatures: updatedCreatures, gold: state.gold - cost },
+        `${creature.nickname} was fully healed! (−${cost}g)`,
+        'success',
+      );
     }
 
     case 'FEED_CREATURE': {

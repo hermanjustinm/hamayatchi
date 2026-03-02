@@ -4,6 +4,7 @@ import { CREATURES, ITEMS } from '../gameData';
 import { getMood, getMoodEmoji, calcExpToNext } from '../gameLogic';
 import { StatBar, HpBar, ExpBar } from '../components/StatBar';
 import { BottomNav } from '../components/BottomNav';
+import { CreatureSprite } from '../components/CreatureSprite';
 
 export function HomeScreen() {
   const { state, activeCreature, dispatch } = useGame();
@@ -32,6 +33,26 @@ export function HomeScreen() {
     return item && item.type === 'food' && e.quantity > 0;
   });
 
+  const medicineItems = state.inventory.filter((e) => {
+    const item = ITEMS[e.itemId];
+    return item && item.type === 'medicine' && (item.effect.health ?? 0) > 0 && e.quantity > 0;
+  });
+
+  // Calculate clinic cost
+  const hpMissing = activeCreature.maxHp - activeCreature.currentHp;
+  const statusPenalty = activeCreature.statusEffect ? 30 : 0;
+  const clinicCost = Math.max(20, Math.ceil(hpMissing * 0.5) + statusPenalty);
+  const clinicFull = activeCreature.currentHp === activeCreature.maxHp && activeCreature.statusEffect === null;
+
+  const TYPE_GLOW: Record<string, string> = {
+    fire: '#ff6b3540',
+    water: '#4fc3f740',
+    grass: '#66bb6a40',
+    electric: '#ffd54f40',
+    shadow: '#b39ddb40',
+    normal: '#9e9e9e30',
+  };
+
   return (
     <div className="screen">
       {/* Player bar */}
@@ -47,18 +68,18 @@ export function HomeScreen() {
         <div className="creature-card">
           <span className="creature-mood">{moodEmoji}</span>
 
-          <div className="creature-sprite-wrap">
-            <span
+          {/* SVG Sprite */}
+          <div
+            className="creature-sprite-wrap"
+            style={{
+              filter: `drop-shadow(0 0 18px ${TYPE_GLOW[template.type] ?? '#ffffff20'})`,
+            }}
+          >
+            <CreatureSprite
+              creatureId={activeCreature.templateId}
+              size={120}
               className="creature-sprite"
-              style={{
-                filter: `drop-shadow(0 0 12px ${
-                  { fire: '#ff6b35', water: '#4fc3f7', grass: '#66bb6a',
-                    electric: '#ffd54f', shadow: '#b39ddb', normal: '#9e9e9e' }[template.type]
-                }40)`,
-              }}
-            >
-              {template.emoji}
-            </span>
+            />
           </div>
 
           <div className="creature-name">{activeCreature.nickname}</div>
@@ -73,30 +94,26 @@ export function HomeScreen() {
             {template.type}
           </div>
 
-          {/* HP */}
           <HpBar current={activeCreature.currentHp} max={activeCreature.maxHp} />
 
-          {/* EXP */}
           <div style={{ marginTop: 6 }}>
             <ExpBar current={activeCreature.exp} toNext={expToNext} level={activeCreature.level} />
           </div>
 
-          {/* Status */}
           {activeCreature.statusEffect && (
             <div style={{ marginTop: 8, fontSize: 7, color: 'var(--warning)' }}>
               ⚠️ {activeCreature.nickname} is {activeCreature.statusEffect}ed!
             </div>
           )}
 
-          {/* HP warning */}
           {hpPct < 0.25 && activeCreature.currentHp > 0 && (
             <div style={{ fontSize: 7, color: 'var(--danger)', marginTop: 6 }}>
-              ⚠️ HP is low! Use a Potion or visit the shop.
+              ⚠️ HP is low — use a Potion or visit the Clinic.
             </div>
           )}
           {activeCreature.currentHp === 0 && (
             <div style={{ fontSize: 7, color: 'var(--danger)', marginTop: 6 }}>
-              💀 Fainted! Use a Revive.
+              💀 Fainted! Use a Revive from your bag or heal at the Clinic.
             </div>
           )}
         </div>
@@ -104,24 +121,17 @@ export function HomeScreen() {
         {/* Care Stats */}
         <div className="card">
           <div className="section-title">Care Stats</div>
-          <div className="care-hunger">
-            <StatBar label="🍎 Hunger" value={activeCreature.care.hunger} className="care-hunger" />
-          </div>
-          <div className="care-happiness">
-            <StatBar label="💖 Happy" value={activeCreature.care.happiness} className="care-happiness" />
-          </div>
-          <div className="care-energy">
-            <StatBar label="⚡ Energy" value={activeCreature.care.energy} className="care-energy" />
-          </div>
-          <div className="care-health">
-            <StatBar label="🌿 Health" value={activeCreature.care.health} className="care-health" />
-          </div>
+          <StatBar label="🍎 Hunger"  value={activeCreature.care.hunger}    className="care-hunger" />
+          <StatBar label="💖 Happy"   value={activeCreature.care.happiness}  className="care-happiness" />
+          <StatBar label="⚡ Energy"  value={activeCreature.care.energy}     className="care-energy" />
+          <StatBar label="🌿 Health"  value={activeCreature.care.health}     className="care-health" />
         </div>
 
         {/* Care Actions */}
         <div className="card">
           <div className="section-title">Actions</div>
           <div className="care-actions">
+
             {/* Feed */}
             <div>
               <button
@@ -145,7 +155,11 @@ export function HomeScreen() {
                         key={entry.itemId}
                         className="feed-item-btn"
                         onClick={() => {
-                          dispatch({ type: 'FEED_CREATURE', creatureUid: activeCreature.uid, itemId: entry.itemId });
+                          dispatch({
+                            type: 'FEED_CREATURE',
+                            creatureUid: activeCreature.uid,
+                            itemId: entry.itemId,
+                          });
                           setShowFeedMenu(false);
                         }}
                       >
@@ -161,81 +175,76 @@ export function HomeScreen() {
             {/* Play */}
             <button
               className="care-btn"
-              onClick={() => dispatch({ type: 'PLAY_WITH_CREATURE', creatureUid: activeCreature.uid })}
+              onClick={() =>
+                dispatch({ type: 'PLAY_WITH_CREATURE', creatureUid: activeCreature.uid })
+              }
               disabled={activeCreature.care.energy < 15 || activeCreature.currentHp === 0}
             >
               <span className="care-icon">🎮</span>
               Play
+              {activeCreature.care.energy < 15 && (
+                <span style={{ fontSize: 6, color: 'var(--type-electric)' }}>Too tired</span>
+              )}
             </button>
 
             {/* Sleep */}
             <button
               className="care-btn"
-              onClick={() => dispatch({ type: 'PUT_TO_SLEEP', creatureUid: activeCreature.uid })}
+              onClick={() =>
+                dispatch({ type: 'PUT_TO_SLEEP', creatureUid: activeCreature.uid })
+              }
               disabled={activeCreature.currentHp === 0}
             >
               <span className="care-icon">😴</span>
               Sleep
             </button>
 
-            {/* Heal at clinic */}
+            {/* Clinic — proper heal with gold cost */}
             <button
               className="care-btn"
-              onClick={() => {
-                const cost = Math.ceil(activeCreature.maxHp * 0.5);
-                if (state.gold < cost) {
-                  dispatch({ type: 'ADD_NOTIF', text: `Clinic costs ${cost}g. Not enough gold!`, notifType: 'error' });
-                  return;
-                }
-                dispatch({ type: 'USE_ITEM_ON_CREATURE', itemId: 'revive', creatureUid: activeCreature.uid });
-                // Deduct gold manually via a hacky approach — we'll use BUY/USE pattern
-                dispatch({ type: 'ADD_NOTIF', text: `${activeCreature.nickname} was healed at the clinic!`, notifType: 'success' });
-              }}
-              disabled={activeCreature.currentHp === activeCreature.maxHp && activeCreature.statusEffect === null}
+              onClick={() =>
+                dispatch({ type: 'HEAL_AT_CLINIC', creatureUid: activeCreature.uid })
+              }
+              disabled={clinicFull}
             >
               <span className="care-icon">🏥</span>
               Clinic
+              <span style={{ fontSize: 6, color: clinicFull ? 'var(--success)' : 'var(--type-electric)' }}>
+                {clinicFull ? '✓ Full' : `${clinicCost}g`}
+              </span>
             </button>
           </div>
 
-          {/* Use bag items */}
-          {state.inventory.some((e) => {
-            const item = ITEMS[e.itemId];
-            return item && item.type === 'medicine' && e.quantity > 0 && item.effect.health;
-          }) && (
+          {/* Use medicine from bag */}
+          {medicineItems.length > 0 && (
             <div style={{ marginTop: 12 }}>
               <div className="section-title">Use Medicine</div>
               <div className="feed-item-list">
-                {state.inventory
-                  .filter((e) => {
-                    const item = ITEMS[e.itemId];
-                    return item && item.type === 'medicine' && e.quantity > 0 && item.effect.health;
-                  })
-                  .map((entry) => {
-                    const item = ITEMS[entry.itemId];
-                    return (
-                      <button
-                        key={entry.itemId}
-                        className="feed-item-btn"
-                        onClick={() =>
-                          dispatch({
-                            type: 'USE_ITEM_ON_CREATURE',
-                            itemId: entry.itemId,
-                            creatureUid: activeCreature.uid,
-                          })
-                        }
-                      >
-                        {item.emoji} {item.name}
-                        <span style={{ color: 'var(--text-muted)', fontSize: 6 }}>×{entry.quantity}</span>
-                      </button>
-                    );
-                  })}
+                {medicineItems.map((entry) => {
+                  const item = ITEMS[entry.itemId];
+                  return (
+                    <button
+                      key={entry.itemId}
+                      className="feed-item-btn"
+                      onClick={() =>
+                        dispatch({
+                          type: 'USE_ITEM_ON_CREATURE',
+                          itemId: entry.itemId,
+                          creatureUid: activeCreature.uid,
+                        })
+                      }
+                    >
+                      {item.emoji} {item.name}
+                      <span style={{ color: 'var(--text-muted)', fontSize: 6 }}>×{entry.quantity}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
         </div>
 
-        {/* Description */}
+        {/* Pokédex entry */}
         <div className="card">
           <div className="section-title">📖 Pokédex</div>
           <p style={{ fontSize: 7, color: 'var(--text-dim)', lineHeight: 2 }}>
