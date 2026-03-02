@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hamayatchi</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header>
+        <h1>Hamayatchi</h1>
+        <p>Raise cute creatures, then explore to meet new ones.</p>
+      </header>
+
+      <section class="panel" aria-label="Active creature">
+        <h2 id="creature-name">Sproutlet</h2>
+        <p id="creature-mood">Mood: Happy</p>
+
+        <div class="stats">
+          <label>Hunger <progress id="hunger" max="100" value="70"></progress></label>
+          <label>Energy <progress id="energy" max="100" value="65"></progress></label>
+          <label>Trust <progress id="trust" max="100" value="30"></progress></label>
+        </div>
+
+        <div class="actions">
+          <button id="feed-btn">Feed 🍓</button>
+          <button id="play-btn">Play 🎾</button>
+          <button id="rest-btn">Rest 💤</button>
+        </div>
+      </section>
+
+      <section class="panel" aria-label="Explore and collect">
+        <h2>Explore</h2>
+        <p>Send your creature out to find a new friend.</p>
+        <button id="explore-btn">Explore 🌲</button>
+        <p id="explore-result">No encounters yet.</p>
+      </section>
+
+      <section class="panel" aria-label="Collection">
+        <h2>Your Collection</h2>
+        <ul id="collection-list"></ul>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
