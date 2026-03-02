@@ -6,7 +6,8 @@ export type StatusEffect = 'burn' | 'paralyze' | 'sleep';
 export type NotifType = 'success' | 'error' | 'info' | 'warning';
 export type CreatureRarity = 'common' | 'uncommon' | 'rare' | 'legendary';
 export type ItemType = 'food' | 'medicine' | 'ball' | 'misc';
-export type QuestType = 'feed' | 'play' | 'battle_win' | 'catch' | 'use_potion';
+export type QuestType = 'feed' | 'play' | 'battle_win' | 'catch' | 'use_potion' | 'expedition_complete' | 'quick_battle';
+export type ExpeditionTier = 'quick' | 'standard' | 'long' | 'overnight';
 
 export interface BaseStats {
   hp: number;
@@ -144,6 +145,17 @@ export interface Area {
   levelRange: [number, number];
   creatures: string[];
   unlockLevel: number;
+  itemDrops: string[];  // items that can appear in expedition loot
+}
+
+export interface Expedition {
+  uid: string;
+  creatureUid: string;
+  areaId: string;
+  startTime: number;   // Date.now() when started
+  durationMs: number;
+  tier: ExpeditionTier;
+  collected: boolean;
 }
 
 export interface DailyQuest {
@@ -180,4 +192,5 @@ export interface GameState {
   pendingMoveLearn: PendingMoveLearn[];
   dailyQuests: DailyQuest[];
   questDate: string;
+  expeditions: Expedition[];
 }

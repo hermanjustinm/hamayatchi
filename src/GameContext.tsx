@@ -15,6 +15,8 @@ import type {
   PendingMoveLearn,
   DailyQuest,
   QuestType,
+  Expedition,
+  ExpeditionTier,
 } from './types';
 import { CREATURES, ITEMS, AREAS, MOVES } from './gameData';
 import {
@@ -40,6 +42,8 @@ import {
   checkNewLevelUpMoves,
   generateDailyQuests,
   updateQuestProgress,
+  calcExpeditionReward,
+  calcPassiveGold,
 } from './gameLogic';
 
 // ─── INITIAL STATE ────────────────────────────────────────────────────────────
@@ -78,6 +82,7 @@ function makeInitialState(): GameState {
     pendingMoveLearn: [],
     dailyQuests: [],
     questDate: '',
+    expeditions: [],
   };
 }
 
@@ -94,6 +99,7 @@ function loadState(): GameState {
         pendingMoveLearn: saved.pendingMoveLearn ?? [],
         dailyQuests: saved.dailyQuests ?? [],
         questDate: saved.questDate ?? '',
+        expeditions: saved.expeditions ?? [],
       };
     }
   } catch {
@@ -134,6 +140,10 @@ type GameAction =
   | { type: 'CLAIM_QUEST_REWARD'; questId: string }
   | { type: 'SELL_ITEM'; itemId: string; qty: number }
   | { type: 'HEAL_PARTY_AT_CLINIC' }
+  | { type: 'START_EXPEDITION'; creatureUid: string; areaId: string; tier: ExpeditionTier }
+  | { type: 'COLLECT_EXPEDITION'; expeditionUid: string }
+  | { type: 'CANCEL_EXPEDITION'; expeditionUid: string }
+  | { type: 'QUICK_BATTLE'; areaId: string }
   | { type: 'TICK' }
   | { type: 'ADD_NOTIF'; text: string; notifType: GameNotification['type'] }
   | { type: 'DISMISS_NOTIF'; id: string }
@@ -346,6 +356,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const activeCreature = state.creatures.find((c) => c.uid === state.activeCreatureId);
       if (!activeCreature || activeCreature.currentHp <= 0) {
         return addNotif(state, 'Your active creature has fainted! Heal first.', 'error');
+      }
+      // Can't manually battle while on expedition
+      if (state.expeditions.some((e) => e.creatureUid === activeCreature.uid && !e.collected)) {
+        return addNotif(state, `${activeCreature.nickname} is on an expedition! Switch active creature or recall them.`, 'warning');
       }
 
       const playerLevel = getPlayerLevel(state.creatures);
@@ -880,6 +894,193 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return s;
     }
 
+    case 'START_EXPEDITION': {
+      const creature = state.creatures.find((c) => c.uid === action.creatureUid);
+      if (!creature) return state;
+      if (creature.currentHp <= 0) {
+        return addNotif(state, `${creature.nickname} is fainted and can't go on an expedition!`, 'error');
+      }
+      if (state.expeditions.some((e) => e.creatureUid === action.creatureUid && !e.collected)) {
+        return addNotif(state, `${creature.nickname} is already on an expedition!`, 'error');
+      }
+      const durations: Record<ExpeditionTier, number> = {
+        quick:     15 * 60 * 1000,
+        standard:  60 * 60 * 1000,
+        long:      4 * 60 * 60 * 1000,
+        overnight: 8 * 60 * 60 * 1000,
+      };
+      const expedition: Expedition = {
+        uid: generateUid(),
+        creatureUid: action.creatureUid,
+        areaId: action.areaId,
+        startTime: Date.now(),
+        durationMs: durations[action.tier],
+        tier: action.tier,
+        collected: false,
+      };
+      const tierLabels: Record<ExpeditionTier, string> = {
+        quick: '15-min', standard: '1-hr', long: '4-hr', overnight: '8-hr',
+      };
+      return addNotif(
+        { ...state, expeditions: [...state.expeditions, expedition] },
+        `${creature.nickname} set off on a ${tierLabels[action.tier]} expedition! 🧭`,
+        'info',
+      );
+    }
+
+    case 'COLLECT_EXPEDITION': {
+      const expedition = state.expeditions.find((e) => e.uid === action.expeditionUid);
+      if (!expedition || expedition.collected) return state;
+      if (Date.now() < expedition.startTime + expedition.durationMs) {
+        return addNotif(state, "They're not back yet! Check the timer.", 'warning');
+      }
+
+      const creature = state.creatures.find((c) => c.uid === expedition.creatureUid);
+      if (!creature) return state;
+
+      const area = AREAS.find((a) => a.id === expedition.areaId);
+      if (!area) return state;
+
+      const reward = calcExpeditionReward(creature, area, expedition.tier);
+
+      // Apply EXP
+      const { creature: leveled, levelsGained } = applyExpGain(creature, reward.exp);
+      // Expedition drains hunger/energy slightly, but makes creature happy to be back
+      const returnedCreature: OwnedCreature = {
+        ...leveled,
+        care: {
+          ...leveled.care,
+          hunger:    Math.max(0, leveled.care.hunger - 15),
+          energy:    Math.max(0, leveled.care.energy - 12),
+          happiness: Math.min(100, leveled.care.happiness + 8),
+        },
+      };
+      let updatedCreatures = state.creatures.map((c) =>
+        c.uid === expedition.creatureUid ? returnedCreature : c,
+      );
+
+      // Add item rewards
+      let updatedInventory = state.inventory;
+      for (const { itemId, qty } of reward.items) {
+        updatedInventory = addInventory(updatedInventory, itemId, qty);
+      }
+
+      // Check level-up moves
+      let newPendingMoves = [...state.pendingMoveLearn];
+      if (levelsGained > 0) {
+        const alreadyIds = new Set(
+          state.pendingMoveLearn.filter((p) => p.creatureUid === leveled.uid).map((p) => p.moveId),
+        );
+        const newIds = checkNewLevelUpMoves(leveled).filter((id) => !alreadyIds.has(id));
+        newPendingMoves = [...newPendingMoves, ...newIds.map((moveId) => ({ creatureUid: leveled.uid, moveId }))];
+      }
+
+      let s: GameState = {
+        ...state,
+        creatures: updatedCreatures,
+        gold: state.gold + reward.gold,
+        inventory: updatedInventory,
+        pendingMoveLearn: newPendingMoves,
+        expeditions: state.expeditions.map((e) =>
+          e.uid === expedition.uid ? { ...e, collected: true } : e,
+        ),
+      };
+
+      if (levelsGained > 0) {
+        s = addNotif(s, `${leveled.nickname} leveled up to Lv.${leveled.level}! 🎉`, 'success');
+      }
+
+      const itemsStr = reward.items.length > 0
+        ? ` Found: ${reward.items.map((i) => `${i.qty}× ${ITEMS[i.itemId]?.name ?? '?'}`).join(', ')}!`
+        : '';
+      s = addNotif(s, `${reward.message} +${reward.gold}g, +${reward.exp} EXP.${itemsStr}`, 'success');
+      s = advanceQuests(s, 'expedition_complete');
+      return s;
+    }
+
+    case 'CANCEL_EXPEDITION': {
+      const expedition = state.expeditions.find((e) => e.uid === action.expeditionUid);
+      if (!expedition || expedition.collected) return state;
+      const creature = state.creatures.find((c) => c.uid === expedition.creatureUid);
+      return addNotif(
+        { ...state, expeditions: state.expeditions.filter((e) => e.uid !== expedition.uid) },
+        `${creature?.nickname ?? 'Creature'} recalled from expedition — no reward.`,
+        'info',
+      );
+    }
+
+    case 'QUICK_BATTLE': {
+      const area = AREAS.find((a) => a.id === action.areaId);
+      if (!area) return state;
+
+      const activeCreature = state.creatures.find((c) => c.uid === state.activeCreatureId);
+      if (!activeCreature || activeCreature.currentHp <= 0) {
+        return addNotif(state, 'Need a healthy active creature to quick battle!', 'error');
+      }
+      if (activeCreature.care.energy < 20) {
+        return addNotif(state, `${activeCreature.nickname} is too tired for a quick battle! Let them rest.`, 'warning');
+      }
+      if (state.expeditions.some((e) => e.creatureUid === activeCreature.uid && !e.collected)) {
+        return addNotif(state, `${activeCreature.nickname} is on an expedition!`, 'warning');
+      }
+
+      // Success chance: 60% base, ±4% per level vs area midpoint
+      const areaAvgLevel = (area.levelRange[0] + area.levelRange[1]) / 2;
+      const levelAdv = activeCreature.level - areaAvgLevel;
+      const successChance = Math.max(0.25, Math.min(0.90, 0.60 + levelAdv * 0.04));
+      const won = Math.random() < successChance;
+
+      const goldGain = won ? Math.floor(area.levelRange[1] * 9 + Math.random() * 25) : 0;
+      const baseExp = calcExpGain(Math.floor(areaAvgLevel), true);
+      const expGain = won ? baseExp : Math.floor(baseExp * 0.2);
+
+      // HP cost: 10–25% on win, 25–45% on loss
+      const hpCostPct = won ? 0.10 + Math.random() * 0.15 : 0.25 + Math.random() * 0.20;
+      const hpCost = Math.max(1, Math.floor(activeCreature.maxHp * hpCostPct));
+      const energyCost = 20 + Math.floor(Math.random() * 10);
+
+      const { creature: leveled, levelsGained } = applyExpGain(activeCreature, expGain);
+      const updatedActive: OwnedCreature = {
+        ...leveled,
+        currentHp: Math.max(1, leveled.currentHp - hpCost),
+        care: { ...leveled.care, energy: Math.max(0, leveled.care.energy - energyCost) },
+      };
+      let updatedCreatures = state.creatures.map((c) =>
+        c.uid === activeCreature.uid ? updatedActive : c,
+      );
+
+      let s: GameState = {
+        ...state,
+        creatures: updatedCreatures,
+        gold: state.gold + goldGain,
+        stats: {
+          ...state.stats,
+          battlesWon:  won ? state.stats.battlesWon + 1  : state.stats.battlesWon,
+          battlesLost: won ? state.stats.battlesLost     : state.stats.battlesLost + 1,
+        },
+      };
+
+      // Level-up moves from quick battle
+      if (levelsGained > 0) {
+        const alreadyIds = new Set(
+          state.pendingMoveLearn.filter((p) => p.creatureUid === leveled.uid).map((p) => p.moveId),
+        );
+        const newIds = checkNewLevelUpMoves(leveled).filter((id) => !alreadyIds.has(id));
+        s = { ...s, pendingMoveLearn: [...s.pendingMoveLearn, ...newIds.map((moveId) => ({ creatureUid: leveled.uid, moveId }))] };
+        s = addNotif(s, `${leveled.nickname} leveled up to Lv.${leveled.level}! 🎉`, 'success');
+      }
+
+      const result = won
+        ? `⚡ Quick Battle: Won! +${goldGain}g, +${expGain} EXP (−${hpCost} HP)`
+        : `💀 Quick Battle: Lost! +${expGain} EXP (−${hpCost} HP)`;
+      s = addNotif(s, result, won ? 'success' : 'warning');
+      if (won) {
+        s = advanceQuests(s, 'battle_win');
+        s = advanceQuests(s, 'quick_battle');
+      }
+      return s;
+    }
+
     case 'HEAL_PARTY_AT_CLINIC': {
       const needsHealing = state.creatures.filter(
         (c) => c.currentHp < c.maxHp || c.statusEffect !== null,
@@ -972,15 +1173,21 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const newQuests = today !== state.questDate ? generateDailyQuests(today) : state.dailyQuests;
       const newQuestDate = today !== state.questDate ? today : state.questDate;
 
-      // Passive gold income — ~5g per real hour (keeps very broke players from stalling)
+      // Passive gold from happy party members — scales with level and happiness
+      const passiveGoldRate = calcPassiveGold(updatedCreatures); // g per hour
       const passiveGold = minutesPassed >= 1
-        ? Math.floor(minutesPassed * 0.083) // ~5g/hr
+        ? Math.floor(passiveGoldRate * minutesPassed / 60)
         : 0;
 
       // Emergency bailout: if all creatures are fainted AND near-broke, give 30g
       const allFainted =
         updatedCreatures.length > 0 && updatedCreatures.every((c) => c.currentHp <= 0);
       const emergencyGold = allFainted && state.gold + passiveGold < 20 ? 30 : 0;
+
+      // Prune very old collected expeditions (keep last 10 max)
+      const activeExpeditions = state.expeditions.filter((e) => !e.collected);
+      const recentCollected = state.expeditions.filter((e) => e.collected).slice(-5);
+      const prunedExpeditions = [...activeExpeditions, ...recentCollected];
 
       let nextState: GameState = {
         ...state,
@@ -990,6 +1197,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         unlockedAreas: newUnlocked,
         dailyQuests: newQuests,
         questDate: newQuestDate,
+        expeditions: prunedExpeditions,
       };
 
       if (emergencyGold > 0) {

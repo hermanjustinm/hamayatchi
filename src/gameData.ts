@@ -412,6 +412,7 @@ export const AREAS: Area[] = [
     levelRange: [3, 12],
     creatures: ['embrit', 'scorchlet'],
     unlockLevel: 1,
+    itemDrops: ['berry', 'medicine', 'antidote', 'lureball'],
   },
   {
     id: 'ocean_shore',
@@ -421,6 +422,7 @@ export const AREAS: Area[] = [
     levelRange: [3, 12],
     creatures: ['dropkin', 'waveling'],
     unlockLevel: 1,
+    itemDrops: ['superberry', 'medicine', 'lureball', 'ether'],
   },
   {
     id: 'verdant_forest',
@@ -430,6 +432,7 @@ export const AREAS: Area[] = [
     levelRange: [3, 12],
     creatures: ['sproutie', 'fernling'],
     unlockLevel: 1,
+    itemDrops: ['candy', 'lureball', 'berry', 'superberry'],
   },
   {
     id: 'thunder_peak',
@@ -439,6 +442,7 @@ export const AREAS: Area[] = [
     levelRange: [8, 20],
     creatures: ['zappet', 'voltling'],
     unlockLevel: 8,
+    itemDrops: ['superball', 'superpotion', 'ether', 'superberry'],
   },
   {
     id: 'shadow_realm',
@@ -448,6 +452,7 @@ export const AREAS: Area[] = [
     levelRange: [15, 30],
     creatures: ['dimlit', 'gloomling'],
     unlockLevel: 15,
+    itemDrops: ['revive', 'superball', 'rarecandy', 'superpotion'],
   },
 ];
 

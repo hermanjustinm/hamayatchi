@@ -1,4 +1,4 @@
-import type { CreatureTemplate, OwnedCreature, Move, ElementType, CareStats, DailyQuest, QuestType } from './types';
+import type { CreatureTemplate, OwnedCreature, Move, ElementType, CareStats, DailyQuest, QuestType, Area, ExpeditionTier } from './types';
 import { CREATURES, MOVES } from './gameData';
 
 // ─── ID GENERATION ───────────────────────────────────────────────────────────
@@ -197,38 +197,48 @@ export function evolveCreature(creature: OwnedCreature): OwnedCreature {
 }
 
 // ─── CARE & TIME ─────────────────────────────────────────────────────────────
+// Idle-game tuned decay rates — designed for players who check in every few hours
+//   Hunger:    depletes ~6/hr  → 17 hrs to empty    (was 24/hr)
+//   Happiness: depletes ~2.4/hr → 42 hrs to empty   (was 9/hr)
+//   Energy:    depletes ~4.8/hr → 21 hrs to empty   (was 15/hr)
 export function applyTimeTick(creature: OwnedCreature, minutesPassed: number): OwnedCreature {
   const mins = Math.min(minutesPassed, 1440); // cap at 24 hours
 
-  // ── Decay ──────────────────────────────────────────────────────────────────
-  const hungerLoss     = mins * 0.4;
-  const happinessLoss  = mins * 0.15;
-  const energyLoss     = mins * 0.25;
-  // health decays faster when starving
-  const healthLoss     = creature.care.hunger < 20 ? mins * 0.10 : mins * 0.02;
+  // ── Care stat decay ────────────────────────────────────────────────────────
+  const hungerLoss     = mins * 0.10;   // 6/hr
+  const happinessLoss  = mins * 0.04;   // 2.4/hr
+  const energyLoss     = mins * 0.08;   // 4.8/hr
+  // Health only degrades meaningfully when starving; otherwise very slow
+  const healthLoss     = creature.care.hunger < 20 ? mins * 0.033 : mins * 0.008;
 
-  // ── Natural recovery (only while alive) ────────────────────────────────────
-  // HP slowly regenerates — enough to recover from a rough battle in ~2 hours
-  const hpRegen = creature.currentHp > 0 && creature.care.energy > 30
-    ? Math.floor(creature.maxHp * 0.004 * mins)  // ~0.4% per minute
+  // ── Natural recovery (alive creature only) ─────────────────────────────────
+  // HP regenerates slowly — full regen from battle damage in ~3 hrs when rested
+  const hpRegen = creature.currentHp > 0 && creature.currentHp < creature.maxHp && creature.care.energy > 30
+    ? Math.floor(creature.maxHp * 0.005 * mins)
     : 0;
 
-  // Health care stat recovers when energy is adequate
-  const healthRegen = creature.currentHp > 0 && creature.care.energy > 50
-    ? mins * 0.08   // slower than decay; nets positive when well-fed
+  // Health care stat climbs back when creature has energy to spare
+  const healthRegen = creature.currentHp > 0 && creature.care.energy > 40
+    ? mins * 0.12
     : 0;
 
-  // Status effects have a small natural chance to clear each tick cycle
-  // (~0.5% per minute = ~50% chance to cure over 90 real minutes if health > 60)
+  // Status effects occasionally clear naturally over time when healthy
   const statusCleared =
     creature.statusEffect !== null &&
     creature.care.health > 60 &&
-    Math.random() < mins * 0.005;
+    Math.random() < mins * 0.004;
+
+  // ── Passive PP regen ───────────────────────────────────────────────────────
+  // 1 PP per 20 real minutes per move — ensures idle players never get PP-locked
+  const ppGain = Math.floor(mins / 20);
 
   return {
     ...creature,
     currentHp: Math.min(creature.maxHp, creature.currentHp + hpRegen),
     statusEffect: statusCleared ? null : creature.statusEffect,
+    moves: ppGain > 0
+      ? creature.moves.map((m) => ({ ...m, pp: Math.min(m.maxPp, m.pp + ppGain) }))
+      : creature.moves,
     care: {
       hunger:    Math.max(0, creature.care.hunger    - hungerLoss),
       happiness: Math.max(0, creature.care.happiness - happinessLoss),
@@ -236,6 +246,77 @@ export function applyTimeTick(creature: OwnedCreature, minutesPassed: number): O
       health:    Math.max(0, Math.min(100, creature.care.health - healthLoss + healthRegen)),
     },
   };
+}
+
+// ─── PASSIVE INCOME ───────────────────────────────────────────────────────────
+// Gold per real-time hour from idle party. Happy high-level creatures earn more.
+export function calcPassiveGold(creatures: OwnedCreature[]): number {
+  return creatures.reduce((total, c) => {
+    if (c.currentHp <= 0) return total; // fainted creatures contribute nothing
+    const happiness = c.care.happiness / 100;
+    return total + Math.ceil(c.level * happiness * 0.6);
+  }, 0);
+}
+
+// ─── EXPEDITION REWARDS ───────────────────────────────────────────────────────
+export interface ExpeditionReward {
+  gold: number;
+  exp: number;
+  items: Array<{ itemId: string; qty: number }>;
+  message: string;
+}
+
+const EXPEDITION_HOURS: Record<ExpeditionTier, number> = {
+  quick: 0.25,     // 15 min
+  standard: 1,     // 1 hr
+  long: 4,         // 4 hr
+  overnight: 8,    // 8 hr
+};
+
+const EXPEDITION_ITEM_CHANCES: Record<ExpeditionTier, [number, number]> = {
+  //                                  [first drop chance, second drop chance]
+  quick:     [0.30, 0.00],
+  standard:  [0.60, 0.15],
+  long:      [0.90, 0.45],
+  overnight: [1.00, 0.75],
+};
+
+export function calcExpeditionReward(
+  creature: OwnedCreature,
+  area: Area,
+  tier: ExpeditionTier,
+): ExpeditionReward {
+  const hours = EXPEDITION_HOURS[tier];
+
+  // Care quality: 0.4 when poorly kept, 1.5 when all stats maxed
+  const careScore = (creature.care.hunger + creature.care.happiness + creature.care.energy) / 300;
+  const careMult = 0.4 + careScore * 1.1;
+
+  // Gold: scales with area max level and expedition length
+  const goldRate = area.levelRange[1] * 5; // g per hour at area cap
+  const goldBase = Math.floor(goldRate * hours * careMult);
+  const gold = goldBase + Math.floor(Math.random() * Math.max(5, goldBase * 0.25));
+
+  // EXP: scales with creature level (so it's always relevant)
+  const expBase = Math.floor(creature.level * 18 * hours * careMult);
+  const exp = expBase + Math.floor(Math.random() * Math.max(5, expBase * 0.2));
+
+  // Item drops
+  const items: Array<{ itemId: string; qty: number }> = [];
+  const [chance1, chance2] = EXPEDITION_ITEM_CHANCES[tier];
+  for (const chance of [chance1, chance2]) {
+    if (chance > 0 && Math.random() < chance && area.itemDrops.length > 0) {
+      const itemId = area.itemDrops[Math.floor(Math.random() * area.itemDrops.length)];
+      const existing = items.find((e) => e.itemId === itemId);
+      if (existing) existing.qty++;
+      else items.push({ itemId, qty: 1 });
+    }
+  }
+
+  const moodWord = careScore > 0.7 ? 'happily' : careScore > 0.4 ? 'diligently' : 'wearily';
+  const message = `${creature.nickname} returned from ${area.name} ${moodWord}!`;
+
+  return { gold, exp, items, message };
 }
 
 export function getMood(care: CareStats): 'happy' | 'content' | 'sad' | 'sick' {
@@ -325,14 +406,18 @@ export function checkNewLevelUpMoves(creature: OwnedCreature): string[] {
 
 // ─── DAILY QUESTS ────────────────────────────────────────────────────────────
 const QUEST_POOL: Array<Omit<DailyQuest, 'progress' | 'completed' | 'claimed'>> = [
-  { id: 'feed3',  label: 'Feed your creature 3 times',  type: 'feed',        goal: 3,  reward: { gold: 30 } },
-  { id: 'play3',  label: 'Play with your creature 3×',  type: 'play',        goal: 3,  reward: { itemId: 'candy',      qty: 1 } },
-  { id: 'win2',   label: 'Win 2 battles',               type: 'battle_win',  goal: 2,  reward: { gold: 50 } },
-  { id: 'catch1', label: 'Catch a wild creature',        type: 'catch',       goal: 1,  reward: { itemId: 'superball',  qty: 1 } },
-  { id: 'win5',   label: 'Win 5 battles',               type: 'battle_win',  goal: 5,  reward: { gold: 120 } },
-  { id: 'potion', label: 'Use a potion in battle',       type: 'use_potion',  goal: 1,  reward: { itemId: 'superpotion', qty: 1 } },
-  { id: 'feed10', label: 'Feed your creature 10 times', type: 'feed',        goal: 10, reward: { itemId: 'superberry', qty: 3 } },
-  { id: 'play5',  label: 'Play with your creature 5×',  type: 'play',        goal: 5,  reward: { gold: 60 } },
+  { id: 'feed3',   label: 'Feed your creature 3 times',   type: 'feed',               goal: 3,  reward: { gold: 30 } },
+  { id: 'play3',   label: 'Play with your creature 3×',   type: 'play',               goal: 3,  reward: { itemId: 'candy',       qty: 1 } },
+  { id: 'win2',    label: 'Win 2 battles',                type: 'battle_win',         goal: 2,  reward: { gold: 50 } },
+  { id: 'catch1',  label: 'Catch a wild creature',         type: 'catch',              goal: 1,  reward: { itemId: 'superball',   qty: 1 } },
+  { id: 'win5',    label: 'Win 5 battles',                type: 'battle_win',         goal: 5,  reward: { gold: 120 } },
+  { id: 'potion',  label: 'Use a potion in battle',        type: 'use_potion',         goal: 1,  reward: { itemId: 'superpotion', qty: 1 } },
+  { id: 'feed10',  label: 'Feed your creature 10 times',  type: 'feed',               goal: 10, reward: { itemId: 'superberry',  qty: 3 } },
+  { id: 'play5',   label: 'Play with your creature 5×',   type: 'play',               goal: 5,  reward: { gold: 60 } },
+  { id: 'exped1',  label: 'Complete an expedition',        type: 'expedition_complete', goal: 1,  reward: { gold: 80 } },
+  { id: 'exped3',  label: 'Complete 3 expeditions',        type: 'expedition_complete', goal: 3,  reward: { itemId: 'superpotion', qty: 2 } },
+  { id: 'qbwin3',  label: 'Win 3 quick battles',           type: 'quick_battle',       goal: 3,  reward: { gold: 60 } },
+  { id: 'qbwin5',  label: 'Win 5 quick battles',           type: 'quick_battle',       goal: 5,  reward: { itemId: 'ether',       qty: 1 } },
 ];
 
 export function generateDailyQuests(dateStr: string): DailyQuest[] {

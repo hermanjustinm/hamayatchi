@@ -1190,6 +1190,55 @@ input:focus, textarea:focus {
   transition: width 0.3s ease;
 }
 
+/* ─── Expedition ─────────────────────────────────────────────────────── */
+.expedition-active-card {
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.expedition-progress-track {
+  height: 5px;
+  background: var(--bg-card);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 2px 0;
+}
+
+.expedition-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 1s linear;
+}
+
+.expedition-tier-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 6px;
+}
+
+.expedition-tier-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--bg-card-hover);
+}
+
+/* ─── Area card expanded ─────────────────────────────────────────────── */
+.area-card.expanded {
+  border-color: var(--accent);
+}
+
+/* ─── Explore screen quick-battle hint ──────────────────────────────── */
+.qb-success-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: var(--font-size-xs);
+  font-weight: bold;
+}
+
 /* ─── Responsive ─────────────────────────────────────────────────────── */
 @media (max-width: 360px) {
   :root {
