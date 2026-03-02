@@ -1,13 +1,21 @@
 # Hamayatchi
 
-A lightweight starter prototype for a creature collector + care game inspired by virtual pets and monster-catching adventures.
+Hamayatchi is a browser prototype for a creature collector + care game loop.
+
+## What's New
+
+- Improved contrast and readability (no more white text on white cards).
+- Expanded core stats: hunger, energy, trust, health, XP, and level.
+- Added more actions: train, heal (berry tonic), and forage.
+- Added simple progression objective: hit level 3 and collect 3 creatures.
+- Added exploration outcomes: battles, discoveries, and creature encounters.
 
 ## Core Loop
 
-1. Care for your active creature (feed, play, rest).
-2. Keep hunger and energy healthy while building trust.
-3. Explore to encounter and befriend new creatures.
-4. Expand your collection and repeat.
+1. Keep your creature healthy with food, rest, and healing.
+2. Train and play to gain XP and level up.
+3. Forage to earn berries (your core resource).
+4. Explore to discover creatures and expand your roster.
 
 ## Run
 
@@ -15,11 +23,4 @@ A lightweight starter prototype for a creature collector + care game inspired by
 python -m http.server 8000
 ```
 
-Then open <http://localhost:8000>.
-
-## Next Steps
-
-- Add save/load using `localStorage`.
-- Add creature traits and type advantages.
-- Add day/night events and rare spawns.
-- Add mini-games that affect stats differently.
+Open <http://localhost:8000>.
