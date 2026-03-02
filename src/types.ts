@@ -6,6 +6,7 @@ export type StatusEffect = 'burn' | 'paralyze' | 'sleep';
 export type NotifType = 'success' | 'error' | 'info' | 'warning';
 export type CreatureRarity = 'common' | 'uncommon' | 'rare' | 'legendary';
 export type ItemType = 'food' | 'medicine' | 'ball' | 'misc';
+export type QuestType = 'feed' | 'play' | 'battle_win' | 'catch' | 'use_potion';
 
 export interface BaseStats {
   hp: number;
@@ -30,6 +31,11 @@ export interface Move {
   description: string;
 }
 
+export interface MoveLearnEntry {
+  moveId: string;
+  level: number;
+}
+
 export interface CreatureTemplate {
   id: string;
   name: string;
@@ -37,6 +43,7 @@ export interface CreatureTemplate {
   emoji: string;
   baseStats: BaseStats;
   learnset: string[];
+  levelUpMoves?: MoveLearnEntry[];
   evolutionLevel?: number;
   evolvesTo?: string;
   description: string;
@@ -83,6 +90,9 @@ export interface Item {
     health?: number;
     hp?: number;
     catchMultiplier?: number;
+    restorePp?: boolean;
+    cureStatus?: boolean;
+    levelUp?: boolean;
   };
   cost: number;
 }
@@ -134,6 +144,22 @@ export interface Area {
   unlockLevel: number;
 }
 
+export interface DailyQuest {
+  id: string;
+  label: string;
+  type: QuestType;
+  goal: number;
+  progress: number;
+  reward: { gold?: number; itemId?: string; qty?: number };
+  completed: boolean;
+  claimed: boolean;
+}
+
+export interface PendingMoveLearn {
+  creatureUid: string;
+  moveId: string;
+}
+
 export interface GameState {
   version: number;
   playerName: string;
@@ -148,4 +174,8 @@ export interface GameState {
   notifications: GameNotification[];
   stats: GameStats;
   unlockedAreas: string[];
+  seenCreatures: string[];
+  pendingMoveLearn: PendingMoveLearn[];
+  dailyQuests: DailyQuest[];
+  questDate: string;
 }

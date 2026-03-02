@@ -1010,6 +1010,186 @@ input:focus, textarea:focus {
   animation: sparkle 1s ease infinite;
 }
 
+/* ─── Modal Overlay ──────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(8, 8, 20, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: notif-in 0.2s ease;
+}
+
+.modal-card {
+  background: var(--bg-card);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  width: 100%;
+  max-width: 340px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 0 40px var(--accent-glow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.modal-title {
+  font-family: var(--font);
+  font-size: 11px;
+  color: var(--type-electric);
+  text-align: center;
+  text-shadow: 0 0 12px var(--type-electric);
+}
+
+.move-learn-card {
+  background: var(--bg-secondary);
+  border: 1px solid #555;
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.move-replace-btn {
+  width: 100%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-family: var(--font);
+  font-size: 7px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.move-replace-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--accent);
+}
+
+/* ─── Tab Row ─────────────────────────────────────────────────────────── */
+.tab-row {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+}
+
+.tab-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 4px;
+  font-family: var(--font);
+  font-size: 7px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
+}
+
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ─── Dex Grid ────────────────────────────────────────────────────────── */
+.dex-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.dex-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+  transition: border-color var(--transition);
+}
+
+.dex-card.caught {
+  border-color: var(--success);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.2);
+}
+
+.dex-card.seen {
+  border-color: var(--border-light);
+}
+
+.dex-card.unseen {
+  opacity: 0.5;
+}
+
+.dex-number {
+  font-family: var(--font);
+  font-size: 5px;
+  color: var(--text-muted);
+}
+
+.dex-sprite-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 54px;
+}
+
+.dex-name {
+  font-family: var(--font);
+  font-size: 5px;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.dex-status {
+  font-family: var(--font);
+  font-size: 5px;
+  color: var(--text-muted);
+  min-height: 8px;
+}
+
+.dex-card.caught .dex-status {
+  color: var(--success);
+}
+
+/* ─── Quest Items ─────────────────────────────────────────────────────── */
+.quest-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  transition: border-color var(--transition);
+}
+
+.quest-item.quest-claimed {
+  opacity: 0.5;
+}
+
+.quest-progress-track {
+  height: 4px;
+  background: var(--bg-primary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.quest-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
 /* ─── Responsive ─────────────────────────────────────────────────────── */
 @media (max-width: 360px) {
   :root {
@@ -1018,4 +1198,5 @@ input:focus, textarea:focus {
   }
   .starter-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .starter-emoji { font-size: 32px; }
+  .dex-grid { grid-template-columns: repeat(3, 1fr); }
 }

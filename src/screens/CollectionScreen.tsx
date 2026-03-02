@@ -7,8 +7,20 @@ import { BottomNav } from '../components/BottomNav';
 import { CreatureSprite } from '../components/CreatureSprite';
 import type { OwnedCreature } from '../types';
 
+// Ordered list of all creatures for the dex — grouped by type family
+const ALL_CREATURE_IDS = [
+  'embrit', 'scorchlet', 'infernox',
+  'dropkin', 'waveling', 'tidalore',
+  'sproutie', 'fernling', 'verdanox',
+  'zappet', 'voltling', 'thunderax',
+  'dimlit', 'gloomling', 'voidrex',
+];
+
+type TabType = 'party' | 'dex';
+
 export function CollectionScreen() {
   const { state, dispatch } = useGame();
+  const [tab, setTab] = useState<TabType>('party');
   const [selectedUid, setSelectedUid] = useState<string | null>(null);
   const [editNickname, setEditNickname] = useState(false);
   const [nicknameInput, setNicknameInput] = useState('');
@@ -27,6 +39,7 @@ export function CollectionScreen() {
     dispatch({ type: 'ADD_NOTIF', text: 'Active creature changed!', notifType: 'info' });
   }
 
+  // ─── Creature Detail View ─────────────────────────────────────────────────
   if (selectedCreature) {
     const template = CREATURES[selectedCreature.templateId];
     const mood = getMood(selectedCreature.care);
@@ -41,9 +54,7 @@ export function CollectionScreen() {
           <span className="screen-title" style={{ fontSize: 10 }}>{selectedCreature.nickname}</span>
           <button
             className="btn btn-secondary btn-sm"
-            onClick={() => {
-              dispatch({ type: 'TOGGLE_FAVORITE', creatureUid: selectedCreature.uid });
-            }}
+            onClick={() => dispatch({ type: 'TOGGLE_FAVORITE', creatureUid: selectedCreature.uid })}
           >
             {selectedCreature.isFavorite ? '⭐' : '☆'}
           </button>
@@ -120,22 +131,10 @@ export function CollectionScreen() {
           <div className="card">
             <div className="section-title">Battle Stats</div>
             <div className="stat-grid">
-              <div className="stat-item">
-                <div className="label">ATK</div>
-                <div className="value">{selectedCreature.attack}</div>
-              </div>
-              <div className="stat-item">
-                <div className="label">DEF</div>
-                <div className="value">{selectedCreature.defense}</div>
-              </div>
-              <div className="stat-item">
-                <div className="label">SPD</div>
-                <div className="value">{selectedCreature.speed}</div>
-              </div>
-              <div className="stat-item">
-                <div className="label">MAX HP</div>
-                <div className="value">{selectedCreature.maxHp}</div>
-              </div>
+              <div className="stat-item"><div className="label">ATK</div><div className="value">{selectedCreature.attack}</div></div>
+              <div className="stat-item"><div className="label">DEF</div><div className="value">{selectedCreature.defense}</div></div>
+              <div className="stat-item"><div className="label">SPD</div><div className="value">{selectedCreature.speed}</div></div>
+              <div className="stat-item"><div className="label">MAX HP</div><div className="value">{selectedCreature.maxHp}</div></div>
             </div>
           </div>
 
@@ -187,69 +186,142 @@ export function CollectionScreen() {
     );
   }
 
+  // ─── Main Collection View ─────────────────────────────────────────────────
+  const caughtIds = new Set(state.creatures.map((c) => c.templateId));
+  const seenIds = new Set(state.seenCreatures);
+  const totalSeen = ALL_CREATURE_IDS.filter((id) => seenIds.has(id) || caughtIds.has(id)).length;
+  const totalCaught = caughtIds.size;
+
   return (
     <div className="screen">
       <div className="screen-header">
-        <span className="screen-title">📦 Party</span>
-        <span style={{ fontSize: 7, color: 'var(--text-muted)' }}>{state.creatures.length} creatures</span>
+        <span className="screen-title">📦 Collection</span>
+        <span style={{ fontSize: 7, color: 'var(--text-muted)' }}>
+          {totalCaught} caught · {totalSeen}/{ALL_CREATURE_IDS.length} seen
+        </span>
+      </div>
+
+      {/* Tab switcher */}
+      <div className="tab-row">
+        <button
+          className={`tab-btn ${tab === 'party' ? 'active' : ''}`}
+          onClick={() => setTab('party')}
+        >
+          🐾 Party ({state.creatures.length})
+        </button>
+        <button
+          className={`tab-btn ${tab === 'dex' ? 'active' : ''}`}
+          onClick={() => setTab('dex')}
+        >
+          📖 Dex ({totalSeen}/{ALL_CREATURE_IDS.length})
+        </button>
       </div>
 
       <div className="screen-body">
-        {state.creatures.length === 0 ? (
-          <div className="empty-state">
-            <span className="empty-icon">📦</span>
-            No creatures yet! Go explore to find some.
-          </div>
-        ) : (
-          <div className="collection-grid">
-            {state.creatures.map((c) => {
-              const tmpl = CREATURES[c.templateId];
-              const hpPct = (c.currentHp / c.maxHp) * 100;
-              const hpColor = hpPct > 50 ? 'var(--hp-high)' : hpPct > 20 ? 'var(--hp-mid)' : 'var(--hp-low)';
-              const isActive = c.uid === state.activeCreatureId;
 
-              return (
-                <div
-                  key={c.uid}
-                  className={`coll-card ${isActive ? 'active-creature' : ''} ${c.currentHp === 0 ? 'fainted' : ''}`}
-                  onClick={() => handleSelect(c)}
-                >
-                  {c.isFavorite && <span className="fav-star">⭐</span>}
-                  <CreatureSprite creatureId={c.templateId} size={52} />
-                  <div className="coll-name">{c.nickname}</div>
-                  <div className="coll-level">Lv. {c.level}</div>
-                  <div className={`type-badge type-${tmpl.type}`} style={{ fontSize: 6 }}>
-                    {tmpl.type}
-                  </div>
-                  <div className="coll-hp-mini">
+        {/* ── Party Tab ── */}
+        {tab === 'party' && (
+          <>
+            {state.creatures.length === 0 ? (
+              <div className="empty-state">
+                <span className="empty-icon">📦</span>
+                No creatures yet! Go explore to find some.
+              </div>
+            ) : (
+              <div className="collection-grid">
+                {state.creatures.map((c) => {
+                  const tmpl = CREATURES[c.templateId];
+                  const hpPct = (c.currentHp / c.maxHp) * 100;
+                  const hpColor = hpPct > 50 ? 'var(--hp-high)' : hpPct > 20 ? 'var(--hp-mid)' : 'var(--hp-low)';
+                  const isActive = c.uid === state.activeCreatureId;
+
+                  return (
                     <div
-                      className="coll-hp-mini-fill"
-                      style={{ width: `${hpPct}%`, background: hpColor }}
-                    />
-                  </div>
-                  {c.currentHp === 0 && (
-                    <div style={{ fontSize: 6, color: 'var(--danger)' }}>FAINTED</div>
-                  )}
-                  {isActive && (
-                    <div style={{ fontSize: 6, color: 'var(--accent)' }}>ACTIVE</div>
-                  )}
+                      key={c.uid}
+                      className={`coll-card ${isActive ? 'active-creature' : ''} ${c.currentHp === 0 ? 'fainted' : ''}`}
+                      onClick={() => handleSelect(c)}
+                    >
+                      {c.isFavorite && <span className="fav-star">⭐</span>}
+                      <CreatureSprite creatureId={c.templateId} size={52} />
+                      <div className="coll-name">{c.nickname}</div>
+                      <div className="coll-level">Lv. {c.level}</div>
+                      <div className={`type-badge type-${tmpl.type}`} style={{ fontSize: 6 }}>
+                        {tmpl.type}
+                      </div>
+                      <div className="coll-hp-mini">
+                        <div className="coll-hp-mini-fill" style={{ width: `${hpPct}%`, background: hpColor }} />
+                      </div>
+                      {c.currentHp === 0 && <div style={{ fontSize: 6, color: 'var(--danger)' }}>FAINTED</div>}
+                      {isActive && <div style={{ fontSize: 6, color: 'var(--accent)' }}>ACTIVE</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Stats summary */}
+            {state.creatures.length > 0 && (
+              <div className="card" style={{ marginTop: 16 }}>
+                <div className="section-title">📊 Trainer Stats</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 7, color: 'var(--text-dim)' }}>
+                  <div>Battles Won: {state.stats.battlesWon}</div>
+                  <div>Battles Lost: {state.stats.battlesLost}</div>
+                  <div>Creatures Collected: {state.stats.creaturesCollected}</div>
+                  <div>Evolutions: {state.stats.creaturesEvolved}</div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            )}
+          </>
         )}
 
-        {/* Stats summary */}
-        {state.creatures.length > 0 && (
-          <div className="card" style={{ marginTop: 16 }}>
-            <div className="section-title">📊 Stats</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 7, color: 'var(--text-dim)' }}>
-              <div>Battles Won: {state.stats.battlesWon}</div>
-              <div>Battles Lost: {state.stats.battlesLost}</div>
-              <div>Creatures Collected: {state.stats.creaturesCollected}</div>
-              <div>Evolutions: {state.stats.creaturesEvolved}</div>
+        {/* ── Dex Tab ── */}
+        {tab === 'dex' && (
+          <>
+            <div className="dex-grid">
+              {ALL_CREATURE_IDS.map((id, idx) => {
+                const tmpl = CREATURES[id];
+                const isCaught = caughtIds.has(id);
+                const isSeen = seenIds.has(id);
+                const isKnown = isCaught || isSeen;
+
+                return (
+                  <div
+                    key={id}
+                    className={`dex-card ${isCaught ? 'caught' : isSeen ? 'seen' : 'unseen'}`}
+                  >
+                    <div className="dex-number">#{String(idx + 1).padStart(3, '0')}</div>
+                    <div className="dex-sprite-wrap">
+                      <CreatureSprite
+                        creatureId={id}
+                        size={52}
+                        style={isKnown ? {} : { filter: 'brightness(0)' }}
+                      />
+                    </div>
+                    <div className="dex-name">{isKnown ? tmpl.name : '???'}</div>
+                    {isKnown && (
+                      <span className={`type-badge type-${tmpl.type}`} style={{ fontSize: 5 }}>
+                        {tmpl.type}
+                      </span>
+                    )}
+                    <div className="dex-status">
+                      {isCaught ? '✓ Caught' : isSeen ? '👁 Seen' : ''}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </div>
+
+            <div className="card" style={{ marginTop: 16, fontSize: 7, color: 'var(--text-dim)', lineHeight: 2 }}>
+              <div className="section-title">📖 Dex Progress</div>
+              <div>Seen: {totalSeen} / {ALL_CREATURE_IDS.length}</div>
+              <div>Caught: {totalCaught} / {ALL_CREATURE_IDS.length}</div>
+              {totalCaught === ALL_CREATURE_IDS.length && (
+                <div style={{ color: 'var(--type-electric)', marginTop: 4 }}>
+                  🏆 Dex Complete!
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
 

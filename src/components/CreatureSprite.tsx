@@ -244,7 +244,7 @@ function Fernling() {
       {/* Tail */}
       <path d="M66,76 C76,72 80,80 78,84 C74,80 70,80 68,76Z" fill="#388E3C" />
       {/* Legs */}
-      <ellipse cx="38" cy="86" rx="6" ry="9" fill="#2E7D32" rx="6" />
+      <ellipse cx="38" cy="86" rx="6" ry="9" fill="#2E7D32" />
       <ellipse cx="48" cy="88" rx="6" ry="9" fill="#2E7D32" />
       <ellipse cx="52" cy="88" rx="6" ry="9" fill="#2E7D32" />
       <ellipse cx="62" cy="86" rx="6" ry="9" fill="#2E7D32" />

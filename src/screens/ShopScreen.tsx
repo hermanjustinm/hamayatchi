@@ -4,16 +4,20 @@ import { BottomNav } from '../components/BottomNav';
 
 const SHOP_CATEGORIES = [
   {
-    label: '🍎 Food',
-    ids: ['berry', 'superberry', 'candy'],
+    label: '🍎 Food & Care',
+    ids: ['berry', 'superberry', 'candy', 'energydrink'],
   },
   {
     label: '💊 Medicine',
-    ids: ['medicine', 'potion', 'superpotion', 'revive'],
+    ids: ['medicine', 'antidote', 'potion', 'superpotion', 'ether', 'revive'],
   },
   {
     label: '🔴 Poké Balls',
     ids: ['lureball', 'superball', 'ultraball'],
+  },
+  {
+    label: '✨ Special',
+    ids: ['rarecandy'],
   },
 ];
 

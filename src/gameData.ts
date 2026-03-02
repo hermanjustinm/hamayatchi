@@ -147,6 +147,10 @@ export const CREATURES: Record<string, CreatureTemplate> = {
     id: 'embrit', name: 'Embrit', type: 'fire', emoji: '🔥',
     baseStats: { hp: 45, attack: 52, defense: 43, speed: 65 },
     learnset: ['scratch', 'ember', 'firespin', 'flameburst'],
+    levelUpMoves: [
+      { moveId: 'bite', level: 12 },
+      { moveId: 'thundershock', level: 20 },
+    ],
     evolutionLevel: 16, evolvesTo: 'scorchlet',
     description: 'A tiny ember spirit that dances in the heart of flames.',
     rarity: 'common', catchRate: 45,
@@ -155,6 +159,10 @@ export const CREATURES: Record<string, CreatureTemplate> = {
     id: 'scorchlet', name: 'Scorchlet', type: 'fire', emoji: '🦊',
     baseStats: { hp: 58, attack: 64, defense: 58, speed: 80 },
     learnset: ['ember', 'flameburst', 'firespin', 'inferno'],
+    levelUpMoves: [
+      { moveId: 'wildcharge', level: 25 },
+      { moveId: 'shadowclaw', level: 35 },
+    ],
     evolutionLevel: 36, evolvesTo: 'infernox',
     description: 'A fiery fox that scorches everything in its path.',
     rarity: 'uncommon', catchRate: 45,
@@ -163,6 +171,9 @@ export const CREATURES: Record<string, CreatureTemplate> = {
     id: 'infernox', name: 'Infernox', type: 'fire', emoji: '🐉',
     baseStats: { hp: 78, attack: 84, defense: 78, speed: 100 },
     learnset: ['flameburst', 'inferno', 'firespin', 'slam'],
+    levelUpMoves: [
+      { moveId: 'thunder', level: 42 },
+    ],
     description: 'A fearsome fire dragon of ancient legend. Its breath melts steel.',
     rarity: 'rare', catchRate: 45,
   },
@@ -172,6 +183,10 @@ export const CREATURES: Record<string, CreatureTemplate> = {
     id: 'dropkin', name: 'Dropkin', type: 'water', emoji: '💧',
     baseStats: { hp: 44, attack: 48, defense: 65, speed: 43 },
     learnset: ['tackle', 'watergun', 'bubblebeam', 'surf'],
+    levelUpMoves: [
+      { moveId: 'vinewhip', level: 12 },
+      { moveId: 'thundershock', level: 20 },
+    ],
     evolutionLevel: 16, evolvesTo: 'waveling',
     description: 'A shy water droplet creature that loves misty mornings.',
     rarity: 'common', catchRate: 45,
@@ -180,6 +195,10 @@ export const CREATURES: Record<string, CreatureTemplate> = {
     id: 'waveling', name: 'Waveling', type: 'water', emoji: '🐬',
     baseStats: { hp: 59, attack: 62, defense: 80, speed: 58 },
     learnset: ['watergun', 'bubblebeam', 'surf', 'hydropump'],
+    levelUpMoves: [
+      { moveId: 'razorleaf', level: 25 },
+      { moveId: 'thunderbolt', level: 35 },
+    ],
     evolutionLevel: 36, evolvesTo: 'tidalore',
     description: 'An elegant dolphin creature that surfs on ocean currents.',
     rarity: 'uncommon', catchRate: 45,
@@ -188,6 +207,9 @@ export const CREATURES: Record<string, CreatureTemplate> = {
     id: 'tidalore', name: 'Tidalore', type: 'water', emoji: '🌊',
     baseStats: { hp: 79, attack: 83, defense: 100, speed: 78 },
     learnset: ['surf', 'hydropump', 'bubblebeam', 'slam'],
+    levelUpMoves: [
+      { moveId: 'solarbeam', level: 42 },
+    ],
     description: 'The ruler of the deep seas. Its roar summons tidal waves.',
     rarity: 'rare', catchRate: 45,
   },
@@ -197,6 +219,10 @@ export const CREATURES: Record<string, CreatureTemplate> = {
     id: 'sproutie', name: 'Sproutie', type: 'grass', emoji: '🌱',
     baseStats: { hp: 45, attack: 49, defense: 49, speed: 45 },
     learnset: ['tackle', 'vinewhip', 'razorleaf', 'solarbeam'],
+    levelUpMoves: [
+      { moveId: 'watergun', level: 12 },
+      { moveId: 'bite', level: 20 },
+    ],
     evolutionLevel: 16, evolvesTo: 'fernling',
     description: 'A tiny plant spirit that sleeps curled up in flower beds.',
     rarity: 'common', catchRate: 45,
@@ -205,6 +231,10 @@ export const CREATURES: Record<string, CreatureTemplate> = {
     id: 'fernling', name: 'Fernling', type: 'grass', emoji: '🦎',
     baseStats: { hp: 60, attack: 62, defense: 63, speed: 60 },
     learnset: ['vinewhip', 'razorleaf', 'solarbeam', 'leafstorm'],
+    levelUpMoves: [
+      { moveId: 'bubblebeam', level: 25 },
+      { moveId: 'shadowclaw', level: 35 },
+    ],
     evolutionLevel: 36, evolvesTo: 'verdanox',
     description: 'A leafy lizard creature that can regrow any part of its body.',
     rarity: 'uncommon', catchRate: 45,
@@ -213,6 +243,9 @@ export const CREATURES: Record<string, CreatureTemplate> = {
     id: 'verdanox', name: 'Verdanox', type: 'grass', emoji: '🌳',
     baseStats: { hp: 80, attack: 82, defense: 83, speed: 80 },
     learnset: ['razorleaf', 'solarbeam', 'leafstorm', 'slam'],
+    levelUpMoves: [
+      { moveId: 'darkpulse', level: 42 },
+    ],
     description: 'An ancient forest guardian. It has lived for a thousand years.',
     rarity: 'rare', catchRate: 45,
   },
@@ -222,6 +255,10 @@ export const CREATURES: Record<string, CreatureTemplate> = {
     id: 'zappet', name: 'Zappet', type: 'electric', emoji: '⚡',
     baseStats: { hp: 35, attack: 55, defense: 40, speed: 90 },
     learnset: ['tackle', 'thundershock', 'thunderbolt', 'wildcharge'],
+    levelUpMoves: [
+      { moveId: 'watergun', level: 12 },
+      { moveId: 'bite', level: 20 },
+    ],
     evolutionLevel: 16, evolvesTo: 'voltling',
     description: 'A tiny rodent that generates electricity when excited.',
     rarity: 'common', catchRate: 45,
@@ -230,6 +267,10 @@ export const CREATURES: Record<string, CreatureTemplate> = {
     id: 'voltling', name: 'Voltling', type: 'electric', emoji: '🐕',
     baseStats: { hp: 45, attack: 65, defense: 55, speed: 100 },
     learnset: ['thundershock', 'thunderbolt', 'wildcharge', 'bite'],
+    levelUpMoves: [
+      { moveId: 'surf', level: 25 },
+      { moveId: 'darkpulse', level: 35 },
+    ],
     evolutionLevel: 36, evolvesTo: 'thunderax',
     description: 'An energetic dog that leaves sparks with every bounding step.',
     rarity: 'uncommon', catchRate: 45,
@@ -238,6 +279,9 @@ export const CREATURES: Record<string, CreatureTemplate> = {
     id: 'thunderax', name: 'Thunderax', type: 'electric', emoji: '🦁',
     baseStats: { hp: 65, attack: 90, defense: 75, speed: 115 },
     learnset: ['thunderbolt', 'thunder', 'wildcharge', 'slam'],
+    levelUpMoves: [
+      { moveId: 'inferno', level: 42 },
+    ],
     description: 'A thunder lion. Its roar alone summons lightning storms.',
     rarity: 'rare', catchRate: 45,
   },
@@ -247,6 +291,10 @@ export const CREATURES: Record<string, CreatureTemplate> = {
     id: 'dimlit', name: 'Dimlit', type: 'shadow', emoji: '🌑',
     baseStats: { hp: 38, attack: 50, defense: 38, speed: 55 },
     learnset: ['scratch', 'shadowclaw', 'nightshade', 'darkpulse'],
+    levelUpMoves: [
+      { moveId: 'bite', level: 12 },
+      { moveId: 'thundershock', level: 20 },
+    ],
     evolutionLevel: 16, evolvesTo: 'gloomling',
     description: 'A mysterious dark kitten that only appears when the lights go out.',
     rarity: 'uncommon', catchRate: 35,
@@ -255,6 +303,10 @@ export const CREATURES: Record<string, CreatureTemplate> = {
     id: 'gloomling', name: 'Gloomling', type: 'shadow', emoji: '🐺',
     baseStats: { hp: 52, attack: 65, defense: 52, speed: 70 },
     learnset: ['shadowclaw', 'darkpulse', 'bite', 'nightshade'],
+    levelUpMoves: [
+      { moveId: 'ember', level: 25 },
+      { moveId: 'thunderbolt', level: 35 },
+    ],
     evolutionLevel: 36, evolvesTo: 'voidrex',
     description: 'A shadowy wolf that hunts in perfect darkness without a sound.',
     rarity: 'rare', catchRate: 35,
@@ -263,6 +315,9 @@ export const CREATURES: Record<string, CreatureTemplate> = {
     id: 'voidrex', name: 'Voidrex', type: 'shadow', emoji: '👁️',
     baseStats: { hp: 72, attack: 95, defense: 72, speed: 90 },
     learnset: ['darkpulse', 'shadowforce', 'shadowclaw', 'slam'],
+    levelUpMoves: [
+      { moveId: 'solarbeam', level: 42 },
+    ],
     description: 'A void dragon from another dimension. Extremely rare and powerful.',
     rarity: 'legendary', catchRate: 15,
   },
@@ -319,6 +374,26 @@ export const ITEMS: Record<string, Item> = {
     id: 'ultraball', name: 'Ultra Ball', emoji: '🟡',
     description: 'An ultra-quality ball with an even better catch rate.',
     type: 'ball', effect: { catchMultiplier: 2.0 }, cost: 100,
+  },
+  antidote: {
+    id: 'antidote', name: 'Antidote', emoji: '🌿',
+    description: 'Cures all status effects (burn, paralyze).',
+    type: 'medicine', effect: { cureStatus: true }, cost: 25,
+  },
+  ether: {
+    id: 'ether', name: 'Ether', emoji: '💎',
+    description: 'Restores all move PP to max for one creature.',
+    type: 'medicine', effect: { restorePp: true }, cost: 45,
+  },
+  energydrink: {
+    id: 'energydrink', name: 'Energy Drink', emoji: '⚡',
+    description: 'Restores 80 Energy — great before a long battle session.',
+    type: 'food', effect: { energy: 80 }, cost: 18,
+  },
+  rarecandy: {
+    id: 'rarecandy', name: 'Rare Candy', emoji: '🍭',
+    description: 'A mysterious candy that grants one immediate level-up.',
+    type: 'misc', effect: { levelUp: true }, cost: 200,
   },
 };
 

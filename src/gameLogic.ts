@@ -1,4 +1,4 @@
-import type { CreatureTemplate, OwnedCreature, Move, ElementType, CareStats } from './types';
+import type { CreatureTemplate, OwnedCreature, Move, ElementType, CareStats, DailyQuest, QuestType } from './types';
 import { CREATURES, MOVES } from './gameData';
 
 // ─── ID GENERATION ───────────────────────────────────────────────────────────
@@ -266,3 +266,77 @@ export function applyStatusDamage(creature: OwnedCreature): { creature: OwnedCre
 export function isParalyzed(creature: OwnedCreature): boolean {
   return creature.statusEffect === 'paralyze' && Math.random() < 0.25;
 }
+
+// ─── CARE → BATTLE MODIFIERS ─────────────────────────────────────────────────
+export interface CareBattleModifier {
+  attackMod: number;   // multiplier applied to outgoing damage
+  defenseMod: number;  // multiplier applied to incoming damage (higher = less damage)
+  skipChance: number;  // probability of skipping a turn from exhaustion
+}
+
+export function getCareBattleModifier(care: CareStats): CareBattleModifier {
+  let attackMod = 1.0;
+  let defenseMod = 1.0;
+  let skipChance = 0;
+
+  if (care.happiness > 70) attackMod += 0.10;   // +10% damage when happy
+  if (care.hunger < 20) attackMod -= 0.15;        // -15% when starving
+  if (care.energy < 20) { skipChance = 0.15; attackMod -= 0.10; } // exhausted
+  if (care.health < 30) defenseMod -= 0.15;       // takes 15% more damage when sick
+
+  return {
+    attackMod: Math.max(0.5, attackMod),
+    defenseMod: Math.max(0.7, defenseMod),
+    skipChance,
+  };
+}
+
+// ─── LEVEL-UP MOVE LEARNING ───────────────────────────────────────────────────
+export function checkNewLevelUpMoves(creature: OwnedCreature): string[] {
+  const template = CREATURES[creature.templateId];
+  if (!template.levelUpMoves) return [];
+  const knownIds = new Set(creature.moves.map((m) => m.id));
+  return template.levelUpMoves
+    .filter((e) => e.level <= creature.level && !knownIds.has(e.moveId))
+    .map((e) => e.moveId);
+}
+
+// ─── DAILY QUESTS ────────────────────────────────────────────────────────────
+const QUEST_POOL: Array<Omit<DailyQuest, 'progress' | 'completed' | 'claimed'>> = [
+  { id: 'feed3',  label: 'Feed your creature 3 times',  type: 'feed',        goal: 3,  reward: { gold: 30 } },
+  { id: 'play3',  label: 'Play with your creature 3×',  type: 'play',        goal: 3,  reward: { itemId: 'candy',      qty: 1 } },
+  { id: 'win2',   label: 'Win 2 battles',               type: 'battle_win',  goal: 2,  reward: { gold: 50 } },
+  { id: 'catch1', label: 'Catch a wild creature',        type: 'catch',       goal: 1,  reward: { itemId: 'superball',  qty: 1 } },
+  { id: 'win5',   label: 'Win 5 battles',               type: 'battle_win',  goal: 5,  reward: { gold: 120 } },
+  { id: 'potion', label: 'Use a potion in battle',       type: 'use_potion',  goal: 1,  reward: { itemId: 'superpotion', qty: 1 } },
+  { id: 'feed10', label: 'Feed your creature 10 times', type: 'feed',        goal: 10, reward: { itemId: 'superberry', qty: 3 } },
+  { id: 'play5',  label: 'Play with your creature 5×',  type: 'play',        goal: 5,  reward: { gold: 60 } },
+];
+
+export function generateDailyQuests(dateStr: string): DailyQuest[] {
+  // Deterministic selection based on date so quests are consistent within a day
+  let s = dateStr.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const available = [...QUEST_POOL];
+  const selected: Array<Omit<DailyQuest, 'progress' | 'completed' | 'claimed'>> = [];
+
+  while (selected.length < 3 && available.length > 0) {
+    const idx = Math.abs(s) % available.length;
+    selected.push(available.splice(idx, 1)[0]);
+    s = (s * 1664525 + 1013904223) | 0; // LCG
+  }
+
+  return selected.map((q) => ({ ...q, progress: 0, completed: false, claimed: false }));
+}
+
+export function updateQuestProgress(
+  quests: DailyQuest[],
+  type: QuestType,
+  increment = 1,
+): DailyQuest[] {
+  return quests.map((q) => {
+    if (q.type !== type || q.completed) return q;
+    const newProgress = Math.min(q.goal, q.progress + increment);
+    return { ...q, progress: newProgress, completed: newProgress >= q.goal };
+  });
+}
+

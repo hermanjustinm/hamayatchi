@@ -3,7 +3,6 @@ import React, {
   useContext,
   useReducer,
   useEffect,
-  useCallback,
   type ReactNode,
 } from 'react';
 import type {
@@ -13,8 +12,11 @@ import type {
   BattleLogEntry,
   GameNotification,
   GameScreen,
+  PendingMoveLearn,
+  DailyQuest,
+  QuestType,
 } from './types';
-import { CREATURES, ITEMS, AREAS } from './gameData';
+import { CREATURES, ITEMS, AREAS, MOVES } from './gameData';
 import {
   createCreatureFromTemplate,
   createWildCreature,
@@ -32,10 +34,16 @@ import {
   isParalyzed,
   generateUid,
   getEffectivenessLabel,
+  calcMaxHp,
+  calcStat,
+  getCareBattleModifier,
+  checkNewLevelUpMoves,
+  generateDailyQuests,
+  updateQuestProgress,
 } from './gameLogic';
 
 // ─── INITIAL STATE ────────────────────────────────────────────────────────────
-const SAVE_KEY = 'hamayatchi_v1';
+const SAVE_KEY = 'hamayatchi_v2';
 
 const DEFAULT_INVENTORY = [
   { itemId: 'berry', quantity: 5 },
@@ -45,7 +53,7 @@ const DEFAULT_INVENTORY = [
 
 function makeInitialState(): GameState {
   return {
-    version: 1,
+    version: 2,
     playerName: '',
     currentScreen: 'start',
     day: 1,
@@ -64,6 +72,10 @@ function makeInitialState(): GameState {
       totalDaysPlayed: 0,
     },
     unlockedAreas: ['volcanic_cave', 'ocean_shore', 'verdant_forest'],
+    seenCreatures: [],
+    pendingMoveLearn: [],
+    dailyQuests: [],
+    questDate: '',
   };
 }
 
@@ -71,8 +83,16 @@ function loadState(): GameState {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (raw) {
-      const saved = JSON.parse(raw) as GameState;
-      return { ...makeInitialState(), ...saved };
+      const saved = JSON.parse(raw) as Partial<GameState>;
+      return {
+        ...makeInitialState(),
+        ...saved,
+        // Ensure new fields exist even in old saves
+        seenCreatures: saved.seenCreatures ?? [],
+        pendingMoveLearn: saved.pendingMoveLearn ?? [],
+        dailyQuests: saved.dailyQuests ?? [],
+        questDate: saved.questDate ?? '',
+      };
     }
   } catch {
     // ignore
@@ -107,6 +127,9 @@ type GameAction =
   | { type: 'NICKNAME_CREATURE'; creatureUid: string; nickname: string }
   | { type: 'TOGGLE_FAVORITE'; creatureUid: string }
   | { type: 'APPLY_EVOLUTION'; creatureUid: string }
+  | { type: 'LEARN_MOVE'; creatureUid: string; moveId: string; replaceMoveId: string | null }
+  | { type: 'SKIP_MOVE_LEARN' }
+  | { type: 'CLAIM_QUEST_REWARD'; questId: string }
   | { type: 'TICK' }
   | { type: 'ADD_NOTIF'; text: string; notifType: GameNotification['type'] }
   | { type: 'DISMISS_NOTIF'; id: string }
@@ -163,6 +186,16 @@ function logBattle(state: GameState, entry: BattleLogEntry): GameState {
   return { ...state, battle: { ...state.battle, log } };
 }
 
+function advanceQuests(state: GameState, type: QuestType, increment = 1): GameState {
+  if (state.dailyQuests.length === 0) return state;
+  return { ...state, dailyQuests: updateQuestProgress(state.dailyQuests, type, increment) };
+}
+
+function addSeen(state: GameState, templateId: string): GameState {
+  if (state.seenCreatures.includes(templateId)) return state;
+  return { ...state, seenCreatures: [...state.seenCreatures, templateId] };
+}
+
 // ─── REDUCER ─────────────────────────────────────────────────────────────────
 function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
@@ -178,12 +211,12 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         creatures: [creature],
         activeCreatureId: creature.uid,
         currentScreen: 'home',
+        seenCreatures: [template.id],
         stats: { ...state.stats, creaturesCollected: 1 },
       };
     }
 
     case 'CHANGE_SCREEN': {
-      // Always clear battle state when navigating away from the battle screen
       return {
         ...state,
         currentScreen: action.screen,
@@ -245,7 +278,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         inventory: removeInventory(state.inventory, action.itemId),
         stats: { ...state.stats },
       };
-      s = addNotif(s, `${creature.nickname} ate the ${item.name}! 🍽️`, 'success');
+      s = advanceQuests(s, 'feed');
+      s = addNotif(s, `${creature.nickname} ate the ${item.name}!`, 'success');
       return s;
     }
 
@@ -264,6 +298,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         },
       }));
       let s = { ...state, creatures: updatedCreatures };
+      s = advanceQuests(s, 'play');
       s = addNotif(s, `${creature.nickname} had a great time playing! 🎮`, 'success');
       return s;
     }
@@ -319,7 +354,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         turnCount: 0,
       };
 
-      return { ...state, battle, currentScreen: 'battle' };
+      // Track seen creature
+      const s = addSeen(state, wildTemplateId);
+      return { ...s, battle, currentScreen: 'battle' };
     }
 
     case 'BATTLE_MOVE': {
@@ -346,24 +383,27 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
       // ─── Player attacks ───────────────────────────────────────────────────
       const freshPlayer = updatedCreatures.find((c) => c.uid === playerCreature.uid)!;
+      const careMod = getCareBattleModifier(freshPlayer.care);
 
-      // Check paralysis
       if (isParalyzed(freshPlayer)) {
         logEntries.push({ text: `${freshPlayer.nickname} is paralyzed and can't move!`, type: 'effect' });
+      } else if (careMod.skipChance > 0 && Math.random() < careMod.skipChance) {
+        logEntries.push({ text: `${freshPlayer.nickname} is too exhausted to attack!`, type: 'effect' });
       } else {
         const dmgResult = calcDamage(freshPlayer, enemyCreature, move);
+        const finalDamage = Math.max(1, Math.floor(dmgResult.damage * careMod.attackMod));
+
         if (dmgResult.missed) {
           logEntries.push({ text: `${freshPlayer.nickname} used ${move.name}... but it missed!`, type: 'damage' });
         } else {
-          enemyCreature = { ...enemyCreature, currentHp: Math.max(0, enemyCreature.currentHp - dmgResult.damage) };
+          enemyCreature = { ...enemyCreature, currentHp: Math.max(0, enemyCreature.currentHp - finalDamage) };
           logEntries.push({
-            text: `${freshPlayer.nickname} used ${move.name}! (−${dmgResult.damage} HP)${dmgResult.isCrit ? ' Critical hit!' : ''}`,
+            text: `${freshPlayer.nickname} used ${move.name}! (−${finalDamage} HP)${dmgResult.isCrit ? ' Critical hit!' : ''}`,
             type: 'damage',
           });
           const effectLabel = getEffectivenessLabel(dmgResult.effectiveness);
           if (effectLabel) logEntries.push({ text: effectLabel, type: 'effect' });
 
-          // Status effect application
           if (move.statusEffect && Math.random() * 100 < move.statusEffect.chance && !enemyCreature.statusEffect) {
             enemyCreature = { ...enemyCreature, statusEffect: move.statusEffect.type };
             logEntries.push({ text: `Wild ${enemyCreature.nickname} is now ${move.statusEffect.type}ed!`, type: 'effect' });
@@ -378,17 +418,34 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         logEntries.push({ text: `Wild ${enemyCreature.nickname} fainted!`, type: 'system' });
         logEntries.push({ text: `Gained ${expGained} EXP and ${goldGained} gold!`, type: 'exp' });
 
-        // Apply EXP
         const { creature: leveled, levelsGained } = applyExpGain(freshPlayer, expGained);
         updatedCreatures = updatedCreatures.map((c) => (c.uid === leveled.uid ? leveled : c));
         if (levelsGained > 0) {
           logEntries.push({ text: `${leveled.nickname} reached Level ${leveled.level}!`, type: 'exp' });
         }
 
-        const newState: GameState = {
+        // Check for new level-up moves
+        let newPendingMoves: PendingMoveLearn[] = [...state.pendingMoveLearn];
+        if (levelsGained > 0) {
+          const alreadyPendingIds = new Set(
+            state.pendingMoveLearn
+              .filter((p) => p.creatureUid === leveled.uid)
+              .map((p) => p.moveId),
+          );
+          const newMoveIds = checkNewLevelUpMoves(leveled).filter(
+            (id) => !alreadyPendingIds.has(id),
+          );
+          newPendingMoves = [
+            ...newPendingMoves,
+            ...newMoveIds.map((moveId) => ({ creatureUid: leveled.uid, moveId })),
+          ];
+        }
+
+        let newState: GameState = {
           ...state,
           creatures: updatedCreatures,
           gold: state.gold + goldGained,
+          pendingMoveLearn: newPendingMoves,
           battle: {
             ...state.battle,
             enemyCreature,
@@ -401,11 +458,11 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           },
           stats: { ...state.stats, battlesWon: state.stats.battlesWon + 1 },
         };
+        newState = advanceQuests(newState, 'battle_win');
         return newState;
       }
 
       // ─── Enemy attacks ────────────────────────────────────────────────────
-      // Apply burn damage to enemy
       const burnResult = applyStatusDamage(enemyCreature);
       if (burnResult.log) {
         enemyCreature = burnResult.creature;
@@ -424,22 +481,24 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         };
 
         const eDmg = calcDamage(enemyCreature, currentPlayer, enemyMove);
+        // Apply player's defense care modifier (sick player takes more damage)
+        const finalEDmg = Math.max(1, Math.floor(eDmg.damage / careMod.defenseMod));
+
         if (eDmg.missed) {
           logEntries.push({ text: `Wild ${enemyCreature.nickname} used ${enemyMove.name}... but it missed!`, type: 'damage' });
         } else {
           currentPlayer = {
             ...currentPlayer,
-            currentHp: Math.max(0, currentPlayer.currentHp - eDmg.damage),
+            currentHp: Math.max(0, currentPlayer.currentHp - finalEDmg),
           };
           updatedCreatures = updatedCreatures.map((c) => (c.uid === currentPlayer.uid ? currentPlayer : c));
           logEntries.push({
-            text: `Wild ${enemyCreature.nickname} used ${enemyMove.name}! (−${eDmg.damage} HP)${eDmg.isCrit ? ' Critical hit!' : ''}`,
+            text: `Wild ${enemyCreature.nickname} used ${enemyMove.name}! (−${finalEDmg} HP)${eDmg.isCrit ? ' Critical hit!' : ''}`,
             type: 'damage',
           });
           const effectLabel = getEffectivenessLabel(eDmg.effectiveness);
           if (effectLabel) logEntries.push({ text: effectLabel, type: 'effect' });
 
-          // Status from enemy move
           if (enemyMove.statusEffect && Math.random() * 100 < enemyMove.statusEffect.chance && !currentPlayer.statusEffect) {
             const updatedWithStatus = { ...currentPlayer, statusEffect: enemyMove.statusEffect.type };
             updatedCreatures = updatedCreatures.map((c) => (c.uid === currentPlayer.uid ? updatedWithStatus : c));
@@ -448,7 +507,6 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         }
       }
 
-      // Apply burn to player
       const playerBurnResult = applyStatusDamage(currentPlayer);
       if (playerBurnResult.log) {
         updatedCreatures = updatedCreatures.map((c) =>
@@ -461,7 +519,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       // ─── Check player faint ───────────────────────────────────────────────
       if (currentPlayer.currentHp <= 0) {
         logEntries.push({ text: `${currentPlayer.nickname} fainted!`, type: 'system' });
-        const newState: GameState = {
+        return {
           ...state,
           creatures: updatedCreatures,
           battle: {
@@ -476,7 +534,6 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           },
           stats: { ...state.stats, battlesLost: state.stats.battlesLost + 1 },
         };
-        return newState;
       }
 
       return {
@@ -512,18 +569,21 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         currentHp: Math.min(c.maxHp, c.currentHp + healAmount),
       }));
 
-      return {
+      const battle = state.battle!;
+      let s: GameState = {
         ...state,
         creatures: updatedCreatures,
         inventory: removeInventory(state.inventory, action.itemId),
         battle: {
-          ...state.battle,
+          ...battle,
           log: [
-            ...state.battle.log,
-            { text: `Used ${item.name}! ${playerCreature.nickname} recovered ${healAmount} HP.`, type: 'info' },
+            ...battle.log,
+            { text: `Used ${item.name}! ${playerCreature.nickname} recovered ${healAmount} HP.`, type: 'info' as const },
           ],
         },
       };
+      s = advanceQuests(s, 'use_potion');
+      return s;
     }
 
     case 'CATCH_CREATURE': {
@@ -539,7 +599,6 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const { enemyCreature } = state.battle;
 
       const success = calcCatchSuccess(enemyCreature, catchMult);
-
       let s = { ...state, inventory: removeInventory(state.inventory, action.itemId) };
 
       if (success) {
@@ -554,6 +613,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         s = {
           ...s,
           creatures: [...s.creatures, caught],
+          seenCreatures: s.seenCreatures.includes(enemyCreature.templateId)
+            ? s.seenCreatures
+            : [...s.seenCreatures, enemyCreature.templateId],
           stats: { ...s.stats, creaturesCollected: s.stats.creaturesCollected + 1 },
           battle: {
             ...s.battle!,
@@ -565,8 +627,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
             ],
           },
         };
+        s = advanceQuests(s, 'catch');
       } else {
-        // Enemy counter-attacks after failed catch
         const playerCreature = s.creatures.find((c) => c.uid === s.battle!.playerCreatureId);
         let updatedCreatures = s.creatures;
         const newLog = [...s.battle!.log, { text: `Oh no! ${enemyCreature.nickname} broke free!`, type: 'system' as const }];
@@ -590,11 +652,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case 'FLEE_BATTLE': {
-      return {
-        ...state,
-        battle: null,
-        currentScreen: 'explore',
-      };
+      return { ...state, battle: null, currentScreen: 'explore' };
     }
 
     case 'BUY_ITEM': {
@@ -624,11 +682,52 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         return addNotif(state, "Can't use balls outside of battle!", 'warning');
       }
 
+      // ── Rare Candy: grant one level ──
+      if (item.effect.levelUp) {
+        if (creature.level >= 50) {
+          return addNotif(state, `${creature.nickname} is already at max level!`, 'warning');
+        }
+        const tmpl = CREATURES[creature.templateId];
+        const newLevel = creature.level + 1;
+        const newMaxHp = calcMaxHp(tmpl.baseStats.hp, newLevel);
+        const hpIncrease = newMaxHp - creature.maxHp;
+        const updatedCreatures = updateCreature(state.creatures, action.creatureUid, (c) => ({
+          ...c,
+          level: newLevel,
+          maxHp: newMaxHp,
+          currentHp: Math.min(newMaxHp, c.currentHp + hpIncrease),
+          attack: calcStat(tmpl.baseStats.attack, newLevel),
+          defense: calcStat(tmpl.baseStats.defense, newLevel),
+          speed: calcStat(tmpl.baseStats.speed, newLevel),
+        }));
+
+        // Check for new level-up moves after the candy
+        const updatedCreature = updatedCreatures.find((c) => c.uid === action.creatureUid)!;
+        const alreadyPendingIds = new Set(
+          state.pendingMoveLearn.filter((p) => p.creatureUid === updatedCreature.uid).map((p) => p.moveId),
+        );
+        const newMoveIds = checkNewLevelUpMoves(updatedCreature).filter((id) => !alreadyPendingIds.has(id));
+        const newPending = [
+          ...state.pendingMoveLearn,
+          ...newMoveIds.map((moveId) => ({ creatureUid: updatedCreature.uid, moveId })),
+        ];
+
+        let s = {
+          ...state,
+          creatures: updatedCreatures,
+          inventory: removeInventory(state.inventory, action.itemId),
+          pendingMoveLearn: newPending,
+        };
+        s = addNotif(s, `${creature.nickname} leveled up to Lv. ${newLevel}! 🍭`, 'success');
+        return s;
+      }
+
+      // ── Standard item application ──
       const updatedCreatures = updateCreature(state.creatures, action.creatureUid, (c) => ({
         ...c,
-        currentHp: item.effect.hp
-          ? Math.min(c.maxHp, c.currentHp + item.effect.hp)
-          : c.currentHp,
+        currentHp: item.effect.hp ? Math.min(c.maxHp, c.currentHp + item.effect.hp) : c.currentHp,
+        statusEffect: item.effect.cureStatus ? null : c.statusEffect,
+        moves: item.effect.restorePp ? c.moves.map((m) => ({ ...m, pp: m.maxPp })) : c.moves,
         care: {
           hunger: Math.min(100, c.care.hunger + (item.effect.hunger ?? 0)),
           happiness: Math.min(100, c.care.happiness + (item.effect.happiness ?? 0)),
@@ -643,6 +742,62 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         inventory: removeInventory(state.inventory, action.itemId),
       };
       s = addNotif(s, `Used ${item.name} on ${creature.nickname}!`, 'success');
+      return s;
+    }
+
+    case 'LEARN_MOVE': {
+      const creature = state.creatures.find((c) => c.uid === action.creatureUid);
+      if (!creature) return state;
+      if (!MOVES[action.moveId]) return state;
+
+      const newMove = { ...MOVES[action.moveId] };
+      let updatedMoves = creature.moves.slice();
+
+      if (action.replaceMoveId === null) {
+        // Auto-learn (creature has < 4 moves)
+        updatedMoves = [...updatedMoves, newMove];
+      } else {
+        // Replace chosen move
+        updatedMoves = updatedMoves.map((m) => (m.id === action.replaceMoveId ? newMove : m));
+      }
+
+      const updatedCreatures = updateCreature(state.creatures, action.creatureUid, (c) => ({
+        ...c,
+        moves: updatedMoves,
+      }));
+
+      // Remove first pending entry (the one just resolved)
+      const newPending = state.pendingMoveLearn.slice(1);
+
+      let s = { ...state, creatures: updatedCreatures, pendingMoveLearn: newPending };
+      s = addNotif(s, `${creature.nickname} learned ${newMove.name}!`, 'success');
+      return s;
+    }
+
+    case 'SKIP_MOVE_LEARN': {
+      return { ...state, pendingMoveLearn: state.pendingMoveLearn.slice(1) };
+    }
+
+    case 'CLAIM_QUEST_REWARD': {
+      const quest = state.dailyQuests.find((q) => q.id === action.questId);
+      if (!quest || !quest.completed || quest.claimed) return state;
+
+      let s = {
+        ...state,
+        dailyQuests: state.dailyQuests.map((q) =>
+          q.id === action.questId ? { ...q, claimed: true } : q,
+        ),
+        gold: state.gold + (quest.reward.gold ?? 0),
+      };
+
+      if (quest.reward.itemId) {
+        s = { ...s, inventory: addInventory(s.inventory, quest.reward.itemId, quest.reward.qty ?? 1) };
+      }
+
+      const rewardStr = quest.reward.gold
+        ? `${quest.reward.gold}g`
+        : `${quest.reward.qty}× ${ITEMS[quest.reward.itemId!]?.name ?? '?'}`;
+      s = addNotif(s, `Quest complete! Reward: ${rewardStr} 🏆`, 'success');
       return s;
     }
 
@@ -692,23 +847,28 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case 'TICK': {
       const now = Date.now();
       const minutesPassed = (now - state.lastTickTime) / 60000;
-      if (minutesPassed < 1) return state; // Don't tick if less than a minute has passed
 
-      const updatedCreatures = state.creatures.map((c) =>
-        applyTimeTick(c, minutesPassed),
-      );
+      const updatedCreatures = minutesPassed >= 1
+        ? state.creatures.map((c) => applyTimeTick(c, minutesPassed))
+        : state.creatures;
 
-      // Unlock areas based on player level
       const playerLevel = getPlayerLevel(updatedCreatures);
       const newUnlocked = [...state.unlockedAreas];
       if (playerLevel >= 8 && !newUnlocked.includes('thunder_peak')) newUnlocked.push('thunder_peak');
       if (playerLevel >= 15 && !newUnlocked.includes('shadow_realm')) newUnlocked.push('shadow_realm');
 
+      // Refresh daily quests if the calendar day changed
+      const today = new Date().toDateString();
+      const newQuests = today !== state.questDate ? generateDailyQuests(today) : state.dailyQuests;
+      const newQuestDate = today !== state.questDate ? today : state.questDate;
+
       return {
         ...state,
         creatures: updatedCreatures,
-        lastTickTime: now,
+        lastTickTime: minutesPassed >= 1 ? now : state.lastTickTime,
         unlockedAreas: newUnlocked,
+        dailyQuests: newQuests,
+        questDate: newQuestDate,
       };
     }
 
@@ -733,22 +893,26 @@ function gameReducer(state: GameState, action: GameAction): GameState {
   }
 }
 
-// Post-reducer: auto-check for evolution after state changes
+// Post-reducer: auto-check for evolution
 function withEvolutionCheck(state: GameState): GameState {
-  // Only check active creature for simplicity (or all creatures)
   let s = state;
   for (const creature of s.creatures) {
     const newTemplateId = checkEvolution(creature);
     if (newTemplateId) {
-      // Trigger evolution automatically
       const evolved = evolveCreature(creature);
       s = {
         ...s,
         creatures: s.creatures.map((c) => (c.uid === creature.uid ? evolved : c)),
+        // Clear pending moves for this creature — evolution replaces the moveset
+        pendingMoveLearn: s.pendingMoveLearn.filter((p) => p.creatureUid !== creature.uid),
         stats: { ...s.stats, creaturesEvolved: s.stats.creaturesEvolved + 1 },
         notifications: [
           ...s.notifications.slice(-3),
-          { id: generateUid(), text: `✨ ${creature.nickname} evolved into ${evolved.nickname}!`, type: 'success' as const },
+          {
+            id: generateUid(),
+            text: `✨ ${creature.nickname} evolved into ${evolved.nickname}!`,
+            type: 'success' as const,
+          },
         ],
       };
     }
@@ -759,7 +923,6 @@ function withEvolutionCheck(state: GameState): GameState {
 function wrappedReducer(state: GameState, action: GameAction): GameState {
   let next = gameReducer(state, action);
 
-  // Auto-save and check evolutions on most actions
   if (action.type !== 'TICK' && action.type !== 'ADD_NOTIF' && action.type !== 'DISMISS_NOTIF') {
     next = withEvolutionCheck(next);
   }
@@ -786,7 +949,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // Time tick every 30 seconds
   useEffect(() => {
     const id = setInterval(() => dispatch({ type: 'TICK' }), 30_000);
-    dispatch({ type: 'TICK' }); // immediate tick on mount
+    dispatch({ type: 'TICK' }); // immediate tick on mount to refresh quests
     return () => clearInterval(id);
   }, []);
 
@@ -814,7 +977,9 @@ export function useGame(): GameContextValue {
   return ctx;
 }
 
-// Convenience hook
 export function useDispatch() {
   return useGame().dispatch;
 }
+
+// Re-export action type for use in components
+export type { GameAction };

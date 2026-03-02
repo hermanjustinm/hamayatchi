@@ -9,6 +9,8 @@ import { CreatureSprite } from '../components/CreatureSprite';
 export function HomeScreen() {
   const { state, activeCreature, dispatch } = useGame();
   const [showFeedMenu, setShowFeedMenu] = useState(false);
+  const [showBagMenu, setShowBagMenu] = useState(false);
+  const [showQuests, setShowQuests] = useState(true);
 
   if (!activeCreature) {
     return (
@@ -33,9 +35,10 @@ export function HomeScreen() {
     return item && item.type === 'food' && e.quantity > 0;
   });
 
-  const medicineItems = state.inventory.filter((e) => {
+  // All usable bag items (exclude balls — those are battle-only)
+  const bagItems = state.inventory.filter((e) => {
     const item = ITEMS[e.itemId];
-    return item && item.type === 'medicine' && (item.effect.health ?? 0) > 0 && e.quantity > 0;
+    return item && item.type !== 'ball' && e.quantity > 0;
   });
 
   // Calculate clinic cost
@@ -53,6 +56,15 @@ export function HomeScreen() {
     normal: '#9e9e9e30',
   };
 
+  // Care bonus/penalty summary for battle
+  const careWarnings: string[] = [];
+  if (activeCreature.care.hunger < 20) careWarnings.push('🍎 Hungry (−15% ATK)');
+  if (activeCreature.care.energy < 20) careWarnings.push('⚡ Exhausted (may skip turn)');
+  if (activeCreature.care.health < 30) careWarnings.push('🌿 Sick (takes more damage)');
+  const happyBonus = activeCreature.care.happiness > 70;
+
+  const unclaimedCount = state.dailyQuests.filter((q) => q.completed && !q.claimed).length;
+
   return (
     <div className="screen">
       {/* Player bar */}
@@ -68,18 +80,11 @@ export function HomeScreen() {
         <div className="creature-card">
           <span className="creature-mood">{moodEmoji}</span>
 
-          {/* SVG Sprite */}
           <div
             className="creature-sprite-wrap"
-            style={{
-              filter: `drop-shadow(0 0 18px ${TYPE_GLOW[template.type] ?? '#ffffff20'})`,
-            }}
+            style={{ filter: `drop-shadow(0 0 18px ${TYPE_GLOW[template.type] ?? '#ffffff20'})` }}
           >
-            <CreatureSprite
-              creatureId={activeCreature.templateId}
-              size={120}
-              className="creature-sprite"
-            />
+            <CreatureSprite creatureId={activeCreature.templateId} size={120} className="creature-sprite" />
           </div>
 
           <div className="creature-name">{activeCreature.nickname}</div>
@@ -116,6 +121,18 @@ export function HomeScreen() {
               💀 Fainted! Use a Revive from your bag or heal at the Clinic.
             </div>
           )}
+
+          {/* Battle readiness hints */}
+          {(careWarnings.length > 0 || happyBonus) && (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {happyBonus && (
+                <div style={{ fontSize: 6, color: 'var(--success)' }}>💖 Happy (+10% ATK in battle)</div>
+              )}
+              {careWarnings.map((w) => (
+                <div key={w} style={{ fontSize: 6, color: 'var(--warning)' }}>{w}</div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Care Stats */}
@@ -137,7 +154,7 @@ export function HomeScreen() {
               <button
                 className="care-btn"
                 style={{ width: '100%' }}
-                onClick={() => setShowFeedMenu((v) => !v)}
+                onClick={() => { setShowFeedMenu((v) => !v); setShowBagMenu(false); }}
                 disabled={foodItems.length === 0}
               >
                 <span className="care-icon">🍽️</span>
@@ -155,11 +172,7 @@ export function HomeScreen() {
                         key={entry.itemId}
                         className="feed-item-btn"
                         onClick={() => {
-                          dispatch({
-                            type: 'FEED_CREATURE',
-                            creatureUid: activeCreature.uid,
-                            itemId: entry.itemId,
-                          });
+                          dispatch({ type: 'FEED_CREATURE', creatureUid: activeCreature.uid, itemId: entry.itemId });
                           setShowFeedMenu(false);
                         }}
                       >
@@ -175,9 +188,7 @@ export function HomeScreen() {
             {/* Play */}
             <button
               className="care-btn"
-              onClick={() =>
-                dispatch({ type: 'PLAY_WITH_CREATURE', creatureUid: activeCreature.uid })
-              }
+              onClick={() => dispatch({ type: 'PLAY_WITH_CREATURE', creatureUid: activeCreature.uid })}
               disabled={activeCreature.care.energy < 15 || activeCreature.currentHp === 0}
             >
               <span className="care-icon">🎮</span>
@@ -190,21 +201,17 @@ export function HomeScreen() {
             {/* Sleep */}
             <button
               className="care-btn"
-              onClick={() =>
-                dispatch({ type: 'PUT_TO_SLEEP', creatureUid: activeCreature.uid })
-              }
+              onClick={() => dispatch({ type: 'PUT_TO_SLEEP', creatureUid: activeCreature.uid })}
               disabled={activeCreature.currentHp === 0}
             >
               <span className="care-icon">😴</span>
               Sleep
             </button>
 
-            {/* Clinic — proper heal with gold cost */}
+            {/* Clinic */}
             <button
               className="care-btn"
-              onClick={() =>
-                dispatch({ type: 'HEAL_AT_CLINIC', creatureUid: activeCreature.uid })
-              }
+              onClick={() => dispatch({ type: 'HEAL_AT_CLINIC', creatureUid: activeCreature.uid })}
               disabled={clinicFull}
             >
               <span className="care-icon">🏥</span>
@@ -215,38 +222,122 @@ export function HomeScreen() {
             </button>
           </div>
 
-          {/* Use medicine from bag */}
-          {medicineItems.length > 0 && (
+          {/* Bag (non-battle items) */}
+          {bagItems.length > 0 && (
             <div style={{ marginTop: 12 }}>
-              <div className="section-title">Use Medicine</div>
-              <div className="feed-item-list">
-                {medicineItems.map((entry) => {
-                  const item = ITEMS[entry.itemId];
-                  return (
-                    <button
-                      key={entry.itemId}
-                      className="feed-item-btn"
-                      onClick={() =>
-                        dispatch({
-                          type: 'USE_ITEM_ON_CREATURE',
-                          itemId: entry.itemId,
-                          creatureUid: activeCreature.uid,
-                        })
-                      }
-                    >
-                      {item.emoji} {item.name}
-                      <span style={{ color: 'var(--text-muted)', fontSize: 6 }}>×{entry.quantity}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <button
+                className="section-title"
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--text-muted)', display: 'flex', gap: 6, alignItems: 'center', padding: 0,
+                }}
+                onClick={() => setShowBagMenu((v) => !v)}
+              >
+                🎒 Use from Bag {showBagMenu ? '▲' : '▼'}
+              </button>
+              {showBagMenu && (
+                <div className="feed-item-list" style={{ marginTop: 6 }}>
+                  {bagItems.map((entry) => {
+                    const item = ITEMS[entry.itemId];
+                    return (
+                      <button
+                        key={entry.itemId}
+                        className="feed-item-btn"
+                        onClick={() =>
+                          dispatch({
+                            type: 'USE_ITEM_ON_CREATURE',
+                            itemId: entry.itemId,
+                            creatureUid: activeCreature.uid,
+                          })
+                        }
+                      >
+                        {item.emoji} {item.name}
+                        <span style={{ color: 'var(--text-muted)', fontSize: 6 }}>×{entry.quantity}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
 
+        {/* Daily Quests */}
+        {state.dailyQuests.length > 0 && (
+          <div className="card">
+            <button
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: 0,
+              }}
+              onClick={() => setShowQuests((v) => !v)}
+            >
+              <span className="section-title" style={{ margin: 0 }}>
+                📋 Daily Quests
+                {unclaimedCount > 0 && (
+                  <span style={{
+                    marginLeft: 8, background: 'var(--success)', color: '#000',
+                    borderRadius: 10, padding: '1px 6px', fontSize: 7,
+                  }}>
+                    {unclaimedCount} ready!
+                  </span>
+                )}
+              </span>
+              <span style={{ fontSize: 8, color: 'var(--text-muted)' }}>{showQuests ? '▲' : '▼'}</span>
+            </button>
+
+            {showQuests && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                {state.dailyQuests.map((quest) => {
+                  const pct = Math.min(100, (quest.progress / quest.goal) * 100);
+                  const rewardStr = quest.reward.gold
+                    ? `${quest.reward.gold}g`
+                    : `${quest.reward.qty}× ${ITEMS[quest.reward.itemId!]?.name ?? '?'}`;
+
+                  return (
+                    <div key={quest.id} className={`quest-item ${quest.claimed ? 'quest-claimed' : ''}`}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 7 }}>{quest.label}</span>
+                        <span style={{ fontSize: 6, color: 'var(--text-muted)' }}>
+                          {quest.progress}/{quest.goal}
+                        </span>
+                      </div>
+                      <div className="quest-progress-track">
+                        <div
+                          className="quest-progress-fill"
+                          style={{
+                            width: `${pct}%`,
+                            background: quest.completed ? 'var(--success)' : 'var(--accent)',
+                          }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, alignItems: 'center' }}>
+                        <span style={{ fontSize: 6, color: 'var(--type-electric)' }}>
+                          🏆 {rewardStr}
+                        </span>
+                        {quest.completed && !quest.claimed && (
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => dispatch({ type: 'CLAIM_QUEST_REWARD', questId: quest.id })}
+                          >
+                            Claim!
+                          </button>
+                        )}
+                        {quest.claimed && (
+                          <span style={{ fontSize: 6, color: 'var(--success)' }}>✓ Claimed</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Pokédex entry */}
         <div className="card">
-          <div className="section-title">📖 Pokédex</div>
+          <div className="section-title">📖 Entry</div>
           <p style={{ fontSize: 7, color: 'var(--text-dim)', lineHeight: 2 }}>
             {template.description}
           </p>
