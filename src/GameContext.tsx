@@ -49,6 +49,8 @@ const DEFAULT_INVENTORY = [
   { itemId: 'berry', quantity: 5 },
   { itemId: 'medicine', quantity: 2 },
   { itemId: 'lureball', quantity: 3 },
+  { itemId: 'ether', quantity: 1 },
+  { itemId: 'bitterberry', quantity: 2 },
 ];
 
 function makeInitialState(): GameState {
@@ -130,6 +132,8 @@ type GameAction =
   | { type: 'LEARN_MOVE'; creatureUid: string; moveId: string; replaceMoveId: string | null }
   | { type: 'SKIP_MOVE_LEARN' }
   | { type: 'CLAIM_QUEST_REWARD'; questId: string }
+  | { type: 'SELL_ITEM'; itemId: string; qty: number }
+  | { type: 'HEAL_PARTY_AT_CLINIC' }
   | { type: 'TICK' }
   | { type: 'ADD_NOTIF'; text: string; notifType: GameNotification['type'] }
   | { type: 'DISMISS_NOTIF'; id: string }
@@ -217,9 +221,22 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case 'CHANGE_SCREEN': {
+      let updatedCreatures = state.creatures;
+      // Restore PP when leaving a completed battle (win or catch) as a reward
+      if (
+        state.battle &&
+        action.screen !== 'battle' &&
+        (state.battle.result === 'win' || state.battle.result === 'catch')
+      ) {
+        updatedCreatures = updateCreature(state.creatures, state.battle.playerCreatureId, (c) => ({
+          ...c,
+          moves: c.moves.map((m) => ({ ...m, pp: m.maxPp })),
+        }));
+      }
       return {
         ...state,
         currentScreen: action.screen,
+        creatures: updatedCreatures,
         battle: action.screen !== 'battle' ? null : state.battle,
       };
     }
@@ -244,12 +261,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         ...c,
         currentHp: c.maxHp,
         statusEffect: null,
+        moves: c.moves.map((m) => ({ ...m, pp: m.maxPp })), // restore PP
         care: { ...c.care, health: 100 },
       }));
 
       return addNotif(
         { ...state, creatures: updatedCreatures, gold: state.gold - cost },
-        `${creature.nickname} was fully healed! (−${cost}g)`,
+        `${creature.nickname} fully healed + PP restored! (−${cost}g)`,
         'success',
       );
     }
@@ -306,12 +324,18 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case 'PUT_TO_SLEEP': {
       const creature = state.creatures.find((c) => c.uid === action.creatureUid);
       if (!creature) return state;
+      if (creature.currentHp <= 0) {
+        return addNotif(state, `${creature.nickname} is fainted! Use a Revive first.`, 'error');
+      }
+      // Restore energy + HP proportional to how healthy the creature is
+      const hpRestore = Math.max(5, Math.floor(creature.maxHp * 0.20 * (creature.care.health / 100)));
       const updatedCreatures = updateCreature(state.creatures, action.creatureUid, (c) => ({
         ...c,
+        currentHp: Math.min(c.maxHp, c.currentHp + hpRestore),
         care: { ...c.care, energy: 100 },
       }));
       let s = { ...state, creatures: updatedCreatures };
-      s = addNotif(s, `${creature.nickname} is resting... Energy restored! 😴`, 'info');
+      s = addNotif(s, `${creature.nickname} rested! Energy full, +${hpRestore} HP recovered. 😴`, 'info');
       return s;
     }
 
@@ -652,7 +676,15 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case 'FLEE_BATTLE': {
-      return { ...state, battle: null, currentScreen: 'explore' };
+      // Partial PP restore on flee — enough to keep going, not a free reward
+      let updatedCreatures = state.creatures;
+      if (state.battle) {
+        updatedCreatures = updateCreature(state.creatures, state.battle.playerCreatureId, (c) => ({
+          ...c,
+          moves: c.moves.map((m) => ({ ...m, pp: Math.min(m.maxPp, m.pp + Math.ceil(m.maxPp * 0.3)) })),
+        }));
+      }
+      return { ...state, battle: null, currentScreen: 'explore', creatures: updatedCreatures };
     }
 
     case 'BUY_ITEM': {
@@ -720,6 +752,39 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         };
         s = addNotif(s, `${creature.nickname} leveled up to Lv. ${newLevel}! 🍭`, 'success');
         return s;
+      }
+
+      // ── Revive-only items (Bitter Berry, etc.) ──
+      if (item.effect.onlyFainted) {
+        if (creature.currentHp > 0) {
+          return addNotif(state, `${creature.nickname} isn't fainted!`, 'warning');
+        }
+        const reviveHp = item.effect.revivePercent !== undefined
+          ? Math.max(1, Math.floor(creature.maxHp * item.effect.revivePercent / 100))
+          : 1;
+        const updatedCreatures = updateCreature(state.creatures, action.creatureUid, (c) => ({
+          ...c,
+          currentHp: reviveHp,
+          statusEffect: null,
+          care: {
+            ...c.care,
+            health: Math.min(100, c.care.health + (item.effect.health ?? 0)),
+          },
+        }));
+        let s = {
+          ...state,
+          creatures: updatedCreatures,
+          inventory: removeInventory(state.inventory, action.itemId),
+        };
+        s = addNotif(s, `${creature.nickname} revived to ${reviveHp} HP! 🍋`, 'success');
+        return s;
+      }
+
+      // ── HP-only items shouldn't be wasted on healthy creatures ──
+      if (item.effect.hp && !item.effect.health && !item.effect.cureStatus && !item.effect.restorePp) {
+        if (creature.currentHp >= creature.maxHp) {
+          return addNotif(state, `${creature.nickname} is already at full HP!`, 'info');
+        }
       }
 
       // ── Standard item application ──
@@ -801,6 +866,51 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return s;
     }
 
+    case 'SELL_ITEM': {
+      const itemEntry = state.inventory.find((e) => e.itemId === action.itemId);
+      if (!itemEntry || itemEntry.quantity < action.qty) return state;
+      const item = getItem(action.itemId);
+      const sellPrice = Math.max(1, Math.floor(item.cost * 0.5)) * action.qty;
+      let s: GameState = {
+        ...state,
+        gold: state.gold + sellPrice,
+        inventory: removeInventory(state.inventory, action.itemId, action.qty),
+      };
+      s = addNotif(s, `Sold ${action.qty}× ${item.name} for ${sellPrice}g`, 'success');
+      return s;
+    }
+
+    case 'HEAL_PARTY_AT_CLINIC': {
+      const needsHealing = state.creatures.filter(
+        (c) => c.currentHp < c.maxHp || c.statusEffect !== null,
+      );
+      if (needsHealing.length === 0) {
+        return addNotif(state, 'Your whole party is already healthy!', 'info');
+      }
+
+      const totalCost = needsHealing.reduce((sum, c) => {
+        const hpMissing = c.maxHp - c.currentHp;
+        const statusPenalty = c.statusEffect ? 30 : 0;
+        return sum + Math.max(20, Math.ceil(hpMissing * 0.5) + statusPenalty);
+      }, 0);
+
+      if (state.gold < totalCost) {
+        return addNotif(state, `Party heal costs ${totalCost}g — not enough gold!`, 'error');
+      }
+
+      const updatedCreatures = state.creatures.map((c) => ({
+        ...c,
+        currentHp: c.maxHp,
+        statusEffect: null as typeof c.statusEffect,
+        moves: c.moves.map((m) => ({ ...m, pp: m.maxPp })),
+        care: { ...c.care, health: 100 },
+      }));
+
+      let s: GameState = { ...state, creatures: updatedCreatures, gold: state.gold - totalCost };
+      s = addNotif(s, `Whole party healed + PP restored! (−${totalCost}g)`, 'success');
+      return s;
+    }
+
     case 'SET_ACTIVE_CREATURE': {
       const creature = state.creatures.find((c) => c.uid === action.creatureUid);
       if (!creature) return state;
@@ -862,14 +972,35 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const newQuests = today !== state.questDate ? generateDailyQuests(today) : state.dailyQuests;
       const newQuestDate = today !== state.questDate ? today : state.questDate;
 
-      return {
+      // Passive gold income — ~5g per real hour (keeps very broke players from stalling)
+      const passiveGold = minutesPassed >= 1
+        ? Math.floor(minutesPassed * 0.083) // ~5g/hr
+        : 0;
+
+      // Emergency bailout: if all creatures are fainted AND near-broke, give 30g
+      const allFainted =
+        updatedCreatures.length > 0 && updatedCreatures.every((c) => c.currentHp <= 0);
+      const emergencyGold = allFainted && state.gold + passiveGold < 20 ? 30 : 0;
+
+      let nextState: GameState = {
         ...state,
         creatures: updatedCreatures,
+        gold: state.gold + passiveGold + emergencyGold,
         lastTickTime: minutesPassed >= 1 ? now : state.lastTickTime,
         unlockedAreas: newUnlocked,
         dailyQuests: newQuests,
         questDate: newQuestDate,
       };
+
+      if (emergencyGold > 0) {
+        nextState = addNotif(
+          nextState,
+          `A kind traveler took pity and gave you ${emergencyGold}g! Use the clinic to revive your creatures.`,
+          'info',
+        );
+      }
+
+      return nextState;
     }
 
     case 'ADD_NOTIF': {

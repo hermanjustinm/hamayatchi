@@ -9,7 +9,7 @@ const SHOP_CATEGORIES = [
   },
   {
     label: '💊 Medicine',
-    ids: ['medicine', 'antidote', 'potion', 'superpotion', 'ether', 'revive'],
+    ids: ['medicine', 'antidote', 'potion', 'superpotion', 'ether', 'revive', 'bitterberry'],
   },
   {
     label: '🔴 Poké Balls',
@@ -27,6 +27,12 @@ export function ShopScreen() {
   function getInventoryQty(itemId: string): number {
     return state.inventory.find((e) => e.itemId === itemId)?.quantity ?? 0;
   }
+
+  // Items the player can sell (non-balls with at least 1 in inventory)
+  const sellableItems = state.inventory.filter((e) => {
+    const item = ITEMS[e.itemId];
+    return item && item.type !== 'ball' && e.quantity > 0;
+  });
 
   return (
     <div className="screen">
@@ -120,6 +126,60 @@ export function ShopScreen() {
             </div>
           )}
         </div>
+
+        {/* Sell Items */}
+        {sellableItems.length > 0 && (
+          <div className="card">
+            <div className="section-title">💸 Sell Items</div>
+            <div style={{ fontSize: 7, color: 'var(--text-muted)', marginBottom: 10 }}>
+              Sell at 50% of buy price. Balls cannot be sold.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {sellableItems.map((entry) => {
+                const item = ITEMS[entry.itemId];
+                const sellPrice = Math.max(1, Math.floor(item.cost * 0.5));
+                return (
+                  <div
+                    key={entry.itemId}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '6px 8px',
+                      background: 'var(--bg-primary)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)',
+                    }}
+                  >
+                    <span style={{ fontSize: 20 }}>{item.emoji}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 7, color: 'var(--text)' }}>{item.name}</div>
+                      <div style={{ fontSize: 6, color: 'var(--text-muted)' }}>
+                        {sellPrice}g each · ×{entry.quantity} in bag
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => dispatch({ type: 'SELL_ITEM', itemId: entry.itemId, qty: 1 })}
+                      >
+                        Sell ×1
+                      </button>
+                      {entry.quantity >= 5 && (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => dispatch({ type: 'SELL_ITEM', itemId: entry.itemId, qty: 5 })}
+                        >
+                          ×5 ({sellPrice * 5}g)
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Tips */}
         <div className="card">

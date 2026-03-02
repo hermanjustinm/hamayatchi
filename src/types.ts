@@ -93,6 +93,8 @@ export interface Item {
     restorePp?: boolean;
     cureStatus?: boolean;
     levelUp?: boolean;
+    onlyFainted?: boolean;   // item can only be used on a fainted creature
+    revivePercent?: number;  // revive to X% of maxHp (0-100)
   };
   cost: number;
 }

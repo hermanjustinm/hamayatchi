@@ -395,6 +395,11 @@ export const ITEMS: Record<string, Item> = {
     description: 'A mysterious candy that grants one immediate level-up.',
     type: 'misc', effect: { levelUp: true }, cost: 200,
   },
+  bitterberry: {
+    id: 'bitterberry', name: 'Bitter Berry', emoji: '🍋',
+    description: 'Revives a fainted creature to 25% HP. Tastes terrible.',
+    type: 'medicine', effect: { onlyFainted: true, revivePercent: 25, health: 20 }, cost: 40,
+  },
 };
 
 // ─── AREAS ───────────────────────────────────────────────────────────────────

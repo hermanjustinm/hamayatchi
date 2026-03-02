@@ -199,19 +199,41 @@ export function evolveCreature(creature: OwnedCreature): OwnedCreature {
 // ─── CARE & TIME ─────────────────────────────────────────────────────────────
 export function applyTimeTick(creature: OwnedCreature, minutesPassed: number): OwnedCreature {
   const mins = Math.min(minutesPassed, 1440); // cap at 24 hours
-  const hungerLoss = mins * 0.4;
-  const happinessLoss = mins * 0.15;
-  const energyLoss = mins * 0.25;
-  // health decreases faster when hungry
-  const healthLoss = creature.care.hunger < 20 ? mins * 0.1 : mins * 0.02;
+
+  // ── Decay ──────────────────────────────────────────────────────────────────
+  const hungerLoss     = mins * 0.4;
+  const happinessLoss  = mins * 0.15;
+  const energyLoss     = mins * 0.25;
+  // health decays faster when starving
+  const healthLoss     = creature.care.hunger < 20 ? mins * 0.10 : mins * 0.02;
+
+  // ── Natural recovery (only while alive) ────────────────────────────────────
+  // HP slowly regenerates — enough to recover from a rough battle in ~2 hours
+  const hpRegen = creature.currentHp > 0 && creature.care.energy > 30
+    ? Math.floor(creature.maxHp * 0.004 * mins)  // ~0.4% per minute
+    : 0;
+
+  // Health care stat recovers when energy is adequate
+  const healthRegen = creature.currentHp > 0 && creature.care.energy > 50
+    ? mins * 0.08   // slower than decay; nets positive when well-fed
+    : 0;
+
+  // Status effects have a small natural chance to clear each tick cycle
+  // (~0.5% per minute = ~50% chance to cure over 90 real minutes if health > 60)
+  const statusCleared =
+    creature.statusEffect !== null &&
+    creature.care.health > 60 &&
+    Math.random() < mins * 0.005;
 
   return {
     ...creature,
+    currentHp: Math.min(creature.maxHp, creature.currentHp + hpRegen),
+    statusEffect: statusCleared ? null : creature.statusEffect,
     care: {
-      hunger: Math.max(0, creature.care.hunger - hungerLoss),
+      hunger:    Math.max(0, creature.care.hunger    - hungerLoss),
       happiness: Math.max(0, creature.care.happiness - happinessLoss),
-      energy: Math.max(0, creature.care.energy - energyLoss),
-      health: Math.max(0, creature.care.health - healthLoss),
+      energy:    Math.max(0, creature.care.energy    - energyLoss),
+      health:    Math.max(0, Math.min(100, creature.care.health - healthLoss + healthRegen)),
     },
   };
 }

@@ -41,11 +41,22 @@ export function HomeScreen() {
     return item && item.type !== 'ball' && e.quantity > 0;
   });
 
-  // Calculate clinic cost
+  // Calculate clinic cost (single creature)
   const hpMissing = activeCreature.maxHp - activeCreature.currentHp;
   const statusPenalty = activeCreature.statusEffect ? 30 : 0;
   const clinicCost = Math.max(20, Math.ceil(hpMissing * 0.5) + statusPenalty);
   const clinicFull = activeCreature.currentHp === activeCreature.maxHp && activeCreature.statusEffect === null;
+
+  // Party heal cost
+  const partyNeedsHealing = state.creatures.filter(
+    (c) => c.currentHp < c.maxHp || c.statusEffect !== null,
+  );
+  const partyHealCost = partyNeedsHealing.reduce((sum, c) => {
+    const missing = c.maxHp - c.currentHp;
+    const sp = c.statusEffect ? 30 : 0;
+    return sum + Math.max(20, Math.ceil(missing * 0.5) + sp);
+  }, 0);
+  const partyAlreadyFull = partyNeedsHealing.length === 0;
 
   const TYPE_GLOW: Record<string, string> = {
     fire: '#ff6b3540',
@@ -206,6 +217,11 @@ export function HomeScreen() {
             >
               <span className="care-icon">😴</span>
               Sleep
+              {activeCreature.currentHp < activeCreature.maxHp && activeCreature.currentHp > 0 && (
+                <span style={{ fontSize: 6, color: 'var(--success)' }}>
+                  +{Math.max(5, Math.floor(activeCreature.maxHp * 0.20 * (activeCreature.care.health / 100)))} HP
+                </span>
+              )}
             </button>
 
             {/* Clinic */}
@@ -220,6 +236,22 @@ export function HomeScreen() {
                 {clinicFull ? '✓ Full' : `${clinicCost}g`}
               </span>
             </button>
+
+            {/* Heal Party — only show if multiple creatures */}
+            {state.creatures.length > 1 && (
+              <button
+                className="care-btn"
+                style={{ gridColumn: '1 / -1' }}
+                onClick={() => dispatch({ type: 'HEAL_PARTY_AT_CLINIC' })}
+                disabled={partyAlreadyFull}
+              >
+                <span className="care-icon">🏥</span>
+                Heal Party
+                <span style={{ fontSize: 6, color: partyAlreadyFull ? 'var(--success)' : 'var(--type-electric)' }}>
+                  {partyAlreadyFull ? '✓ All full' : `${partyHealCost}g`}
+                </span>
+              </button>
+            )}
           </div>
 
           {/* Bag (non-battle items) */}
