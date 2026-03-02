@@ -1,0 +1,121 @@
+:root {
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  color: #16213a;
+  background: #f4f7fb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, #d8efff, #f7dff0 70%);
+  min-height: 100vh;
+  color: #16213a;
+}
+
+.app {
+  width: min(960px, 95vw);
+  display: grid;
+  gap: 1rem;
+  padding: 1.5rem;
+  margin: 0 auto;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  color: #10213c;
+}
+
+.hero p {
+  margin: 0.4rem 0 0;
+  color: #304468;
+  font-size: 1.05rem;
+}
+
+.panel {
+  background: #ffffff;
+  border: 1px solid #d5e3f8;
+  border-radius: 14px;
+  padding: 1rem;
+  box-shadow: 0 8px 24px rgba(16, 33, 60, 0.08);
+}
+
+.panel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+h2 {
+  margin: 0;
+  color: #14294a;
+}
+
+.status-line {
+  margin: 0.5rem 0 0;
+  color: #31486f;
+  font-weight: 600;
+}
+
+.stats {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+label {
+  display: grid;
+  gap: 0.25rem;
+  font-weight: 700;
+  color: #20345d;
+}
+
+progress {
+  width: 100%;
+  height: 0.95rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+button {
+  border: none;
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: linear-gradient(180deg, #8ec5fc, #6ca8f3);
+  color: #10213b;
+}
+
+button:hover {
+  filter: brightness(1.05);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+#explore-result,
+#resources,
+#objective {
+  color: #233a61;
+  font-weight: 600;
+}
+
+#collection-list {
+  margin: 0.25rem 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.3rem;
+  color: #1f3560;
+  font-weight: 600;
+}

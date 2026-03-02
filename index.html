@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hamayatchi</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="hero">
+        <h1>Hamayatchi</h1>
+        <p>Raise your partner, battle the wilds, and grow your collection.</p>
+      </header>
+
+      <section class="panel" aria-label="Active creature">
+        <div class="panel-heading">
+          <h2 id="creature-name">Sproutlet</h2>
+          <p id="creature-level">Lv. 1</p>
+        </div>
+        <p id="creature-mood" class="status-line">Mood: Happy</p>
+        <p id="day-counter" class="status-line">Day 1</p>
+
+        <div class="stats">
+          <label>Hunger <progress id="hunger" max="100" value="70"></progress></label>
+          <label>Energy <progress id="energy" max="100" value="65"></progress></label>
+          <label>Trust <progress id="trust" max="100" value="30"></progress></label>
+          <label>Health <progress id="health" max="100" value="85"></progress></label>
+          <label>XP <progress id="xp" max="100" value="0"></progress></label>
+        </div>
+
+        <div class="actions">
+          <button id="feed-btn">Feed 🍓</button>
+          <button id="play-btn">Play 🎾</button>
+          <button id="rest-btn">Rest 💤</button>
+          <button id="train-btn">Train ⚔️</button>
+          <button id="heal-btn">Heal 🧪 (5 berries)</button>
+        </div>
+      </section>
+
+      <section class="panel" aria-label="World events">
+        <h2>Adventure</h2>
+        <p id="resources">Berries: 10</p>
+        <p id="objective">Objective: Reach Level 3 and collect 3 creatures.</p>
+        <div class="actions">
+          <button id="explore-btn">Explore 🌲</button>
+          <button id="forage-btn">Forage 🍇</button>
+        </div>
+        <p id="explore-result">No encounters yet.</p>
+      </section>
+
+      <section class="panel" aria-label="Collection">
+        <h2>Your Collection</h2>
+        <ul id="collection-list"></ul>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
